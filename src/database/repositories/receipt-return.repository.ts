@@ -1,4 +1,4 @@
-import { SQL, eq, and, desc, sql } from "drizzle-orm";
+import { and, desc, eq, SQL, sql } from "drizzle-orm";
 import { singleton } from "tsyringe";
 import { database } from "../../common/config/database.ts";
 import {
@@ -7,14 +7,14 @@ import {
   RepositoryResult,
 } from "../../common/types/index.d.ts";
 import {
-  receiptReturnTable,
   InsertReceiptReturn,
-  UpdateReceiptReturn,
+  receiptReturnTable,
   SelectReceiptReturn,
+  UpdateReceiptReturn,
 } from "../schemas/receipt-return.schema.ts";
 import { supplierTable } from "../schemas/supplier.schema.ts";
 import { PgTx } from "../custom/data-types.ts";
-import { ReceiptReturnStatus } from "../../modules/receipt/enums/receipt.enum.ts";
+import { ReceiptReturnStatus } from "../enums/receipt.enum.ts";
 
 @singleton()
 export class ReceiptReturnRepository {
@@ -32,7 +32,7 @@ export class ReceiptReturnRepository {
 
   async updateReceiptReturn(
     opts: RepositoryOptionUpdate<UpdateReceiptReturn>,
-    tx?: PgTx
+    tx?: PgTx,
   ) {
     const db = tx || database;
     const filters: SQL[] = [...opts.where];
@@ -58,14 +58,14 @@ export class ReceiptReturnRepository {
 
   async findReceiptReturnById(
     id: SelectReceiptReturn["id"],
-    opts: Pick<RepositoryOption, "select">
+    opts: Pick<RepositoryOption, "select">,
   ): Promise<RepositoryResult> {
     const query = database
       .selectDistinct(opts.select)
       .from(receiptReturnTable)
       .leftJoin(
         supplierTable,
-        eq(supplierTable.id, receiptReturnTable.supplier)
+        eq(supplierTable.id, receiptReturnTable.supplier),
       )
       .where(and(eq(receiptReturnTable.id, id)));
 
@@ -74,7 +74,7 @@ export class ReceiptReturnRepository {
   }
 
   async findReceiptsReturnByCondition(
-    opts: RepositoryOption
+    opts: RepositoryOption,
   ): Promise<RepositoryResult> {
     let count: number | null = null;
     const filters: SQL[] = [...opts.where];
@@ -84,7 +84,7 @@ export class ReceiptReturnRepository {
       .from(receiptReturnTable)
       .leftJoin(
         supplierTable,
-        eq(supplierTable.id, receiptReturnTable.supplier)
+        eq(supplierTable.id, receiptReturnTable.supplier),
       )
       .where(and(...filters));
 
@@ -112,14 +112,14 @@ export class ReceiptReturnRepository {
 
   async findReceiptReturnByReceiptNumber(
     receiptNumber: SelectReceiptReturn["receiptNumber"],
-    opts: Pick<RepositoryOption, "select">
+    opts: Pick<RepositoryOption, "select">,
   ): Promise<RepositoryResult> {
     const query = database
       .selectDistinct(opts.select)
       .from(receiptReturnTable)
       .leftJoin(
         supplierTable,
-        eq(supplierTable.id, receiptReturnTable.supplier)
+        eq(supplierTable.id, receiptReturnTable.supplier),
       )
       .where(and(eq(receiptReturnTable.receiptNumber, receiptNumber)));
 
@@ -130,7 +130,9 @@ export class ReceiptReturnRepository {
   async getTotalOfReturn() {
     const query = database
       .select({
-        total: sql<number>`coalesce(sum(${receiptReturnTable.totalProduct}), 0)`,
+        total: sql<
+          number
+        >`coalesce(sum(${receiptReturnTable.totalProduct}), 0)`,
       })
       .from(receiptReturnTable)
       .where(eq(receiptReturnTable.status, ReceiptReturnStatus.COMPLETED));
@@ -141,7 +143,7 @@ export class ReceiptReturnRepository {
 
   async getTotalReturnsByDateRange(
     startDate: string,
-    endDate: string
+    endDate: string,
   ): Promise<{ x: string; y: number }[]> {
     // Ensure dates are in correct format
     const start = new Date(startDate);
@@ -151,19 +153,17 @@ export class ReceiptReturnRepository {
     const results = await database
       .select({
         date: sql<string>`DATE(${receiptReturnTable.createdAt})`,
-        total: sql<number>`COALESCE(SUM(${receiptReturnTable.totalProduct}), 0)`,
+        total: sql<
+          number
+        >`COALESCE(SUM(${receiptReturnTable.totalProduct}), 0)`,
       })
       .from(receiptReturnTable)
       .where(
         and(
-          sql`${
-            receiptReturnTable.createdAt
-          }::date >= ${start.toISOString()}::date`,
-          sql`${
-            receiptReturnTable.createdAt
-          }::date <= ${end.toISOString()}::date`,
-          eq(receiptReturnTable.status, ReceiptReturnStatus.COMPLETED)
-        )
+          sql`${receiptReturnTable.createdAt}::date >= ${start.toISOString()}::date`,
+          sql`${receiptReturnTable.createdAt}::date <= ${end.toISOString()}::date`,
+          eq(receiptReturnTable.status, ReceiptReturnStatus.COMPLETED),
+        ),
       )
       .groupBy(sql`DATE(${receiptReturnTable.createdAt})`)
       .orderBy(sql`DATE(${receiptReturnTable.createdAt})`);

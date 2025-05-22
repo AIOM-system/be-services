@@ -1,4 +1,4 @@
-import { SQL, eq, and, desc, sql } from "drizzle-orm";
+import { and, desc, eq, SQL, sql } from "drizzle-orm";
 import { singleton } from "tsyringe";
 import { database } from "../../common/config/database.ts";
 import { PgTx } from "../custom/data-types.ts";
@@ -9,14 +9,14 @@ import {
 } from "../../common/types/index.d.ts";
 
 import {
-  receiptImportTable,
   InsertReceiptImport,
-  UpdateReceiptImport,
+  receiptImportTable,
   SelectReceiptImport,
+  UpdateReceiptImport,
 } from "../schemas/receipt-import.schema.ts";
 import { supplierTable } from "../schemas/supplier.schema.ts";
-
-import { ReceiptImportStatus } from "../../modules/receipt/enums/receipt.enum.ts";
+import { ReceiptImportStatus } from "../enums/receipt.enum.ts";
+import { receiptItemTable } from "../schemas/receipt-item.schema.ts";
 
 @singleton()
 export class ReceiptImportRepository {
@@ -39,7 +39,7 @@ export class ReceiptImportRepository {
 
   async updateReceiptImport(
     opts: RepositoryOptionUpdate<UpdateReceiptImport>,
-    tx?: PgTx
+    tx?: PgTx,
   ) {
     const db = tx || database;
     const filters: SQL[] = [...opts.where];
@@ -49,6 +49,10 @@ export class ReceiptImportRepository {
       .set(opts.set)
       .where(and(...filters))
       .returning({ id: receiptImportTable.id });
+
+    if (!result.length) {
+      return { data: null, error: "Can't update receipt import" };
+    }
 
     return { data: result, error: null };
   }
@@ -65,31 +69,38 @@ export class ReceiptImportRepository {
 
   async findReceiptImportById(
     id: SelectReceiptImport["id"],
-    opts: Pick<RepositoryOption, "select">
+    opts: Pick<RepositoryOption, "select">,
+    tx?: PgTx,
   ): Promise<RepositoryResult> {
-    const query = database
+    const db = tx || database;
+    const query = db
       .selectDistinct(opts.select)
       .from(receiptImportTable)
       .leftJoin(
         supplierTable,
-        eq(supplierTable.id, receiptImportTable.supplier)
+        eq(supplierTable.id, receiptImportTable.supplier),
       )
       .where(and(eq(receiptImportTable.id, id)));
 
     const [result] = await query.execute();
+
+    if (!result) {
+      return { data: null, error: `Receipt import not found with id: ${id}` };
+    }
+
     return { data: result, error: null };
   }
 
   async findReceiptImportByReceiptNumber(
     receiptNumber: SelectReceiptImport["receiptNumber"],
-    opts: Pick<RepositoryOption, "select">
+    opts: Pick<RepositoryOption, "select">,
   ): Promise<RepositoryResult> {
     const query = database
       .selectDistinct(opts.select)
       .from(receiptImportTable)
       .leftJoin(
         supplierTable,
-        eq(supplierTable.id, receiptImportTable.supplier)
+        eq(supplierTable.id, receiptImportTable.supplier),
       )
       .where(and(eq(receiptImportTable.receiptNumber, receiptNumber)));
 
@@ -97,8 +108,29 @@ export class ReceiptImportRepository {
     return { data: result, error: null };
   }
 
+  async findReceiptsImportByStatus(
+    status: ReceiptImportStatus,
+    userId: string,
+    opts: Pick<RepositoryOption, "select">,
+    tx?: PgTx,
+  ): Promise<RepositoryResult> {
+    const filters: SQL[] = [
+      eq(receiptImportTable.status, status),
+      eq(receiptImportTable.userCreated, userId),
+    ];
+
+    const db = tx || database;
+    const query = db
+      .select(opts.select)
+      .from(receiptImportTable)
+      .where(and(...filters));
+
+    const results = await query.execute();
+    return { data: results, error: null };
+  }
+
   async findReceiptsImportByCondition(
-    opts: RepositoryOption
+    opts: RepositoryOption,
   ): Promise<RepositoryResult> {
     let count: number | null = null;
     const filters: SQL[] = [...opts.where];
@@ -108,7 +140,7 @@ export class ReceiptImportRepository {
       .from(receiptImportTable)
       .leftJoin(
         supplierTable,
-        eq(supplierTable.id, receiptImportTable.supplier)
+        eq(supplierTable.id, receiptImportTable.supplier),
       )
       .where(and(...filters));
 
@@ -134,10 +166,27 @@ export class ReceiptImportRepository {
     return { data: results, error: null, count };
   }
 
+  async getReceiptItemsByReceiptId(
+    receiptId: SelectReceiptImport["id"],
+    opts: Pick<RepositoryOption, "select">,
+    tx?: PgTx,
+  ): Promise<RepositoryResult> {
+    const db = tx || database;
+    const query = db
+      .select(opts.select)
+      .from(receiptItemTable)
+      .where(eq(receiptItemTable.receiptId, receiptId));
+
+    const results = await query.execute();
+    return { data: results, error: null };
+  }
+
   async getTotalOfImportNew() {
     const count = await database
       .select({
-        value: sql<number>`coalesce(sum(${receiptImportTable.totalProduct}), 0)`,
+        value: sql<
+          number
+        >`coalesce(sum(${receiptImportTable.totalProduct}), 0)`,
       })
       .from(receiptImportTable)
       .where(eq(receiptImportTable.status, ReceiptImportStatus.COMPLETED))
@@ -166,14 +215,10 @@ export class ReceiptImportRepository {
       .from(receiptImportTable)
       .where(
         and(
-          sql`${
-            receiptImportTable.createdAt
-          }::date >= ${start.toISOString()}::date`,
-          sql`${
-            receiptImportTable.createdAt
-          }::date <= ${end.toISOString()}::date`,
-          eq(receiptImportTable.status, ReceiptImportStatus.COMPLETED)
-        )
+          sql`${receiptImportTable.createdAt}::date >= ${start.toISOString()}::date`,
+          sql`${receiptImportTable.createdAt}::date <= ${end.toISOString()}::date`,
+          eq(receiptImportTable.status, ReceiptImportStatus.COMPLETED),
+        ),
       )
       .execute();
 

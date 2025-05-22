@@ -48,7 +48,7 @@ export const getPaginationMetadata = (
   page: number,
   limit: number,
   offset: number,
-  totalItems: number
+  totalItems: number,
 ): PaginationResult => {
   // Calculate total number of pages
   const totalPages = Math.ceil(totalItems / limit);
@@ -112,4 +112,30 @@ export function isChanged(prop1, prop2): boolean {
   } else {
     return true;
   }
+}
+
+/**
+ * Extracts the numeric part of a string with a 2-letter prefix.
+ * @param input A string like "NK01234".
+ * @returns The numeric value, or throw error if parsing fails.
+ */
+export function getNumberFromStringOrThrow(input: string): number {
+  const match = input.match(/[0-9]+/);
+  if (!match) {
+    throw new Error(`No digits found in "${input}"`);
+  }
+  return Number.parseInt(match[0], 10);
+}
+
+/**
+ * Removes properties from an object that are null, undefined, or empty strings.
+ * @param obj The object to clean.
+ * @returns A new object without null, undefined, or empty string values.
+ */
+export function removeEmptyProps<T extends Record<string, unknown>>(obj: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(obj).filter(
+      ([, value]) => value !== null && value !== undefined && value !== ""
+    )
+  ) as Partial<T>;
 }

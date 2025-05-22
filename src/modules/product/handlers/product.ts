@@ -1,6 +1,6 @@
-import { singleton, inject } from "tsyringe";
+import { inject, injectable } from "tsyringe";
 import { Context } from "hono";
-import { or, ilike, eq, desc, inArray, lte, gte, sql } from "drizzle-orm";
+import { desc, eq, gte, ilike, inArray, lte, or, sql } from "drizzle-orm";
 import dayjs from "dayjs";
 import * as XLSX from "xlsx";
 
@@ -11,14 +11,14 @@ import { ProductInventoryLogRepository } from "../../../database/repositories/pr
 import { UserActivityRepository } from "../../../database/repositories/user-activity.repository.ts";
 
 import {
-  productTable,
   type InsertProduct,
+  productTable,
   type UpdateProduct,
 } from "../../../database/schemas/product.schema.ts";
 import { supplierTable } from "../../../database/schemas/supplier.schema.ts";
 import {
-  productSupplierTable,
   type InsertProductSupplier,
+  productSupplierTable,
 } from "../../../database/schemas/product-supplier.schema.ts";
 import { receiptItemTable } from "../../../database/schemas/receipt-item.schema.ts";
 
@@ -28,7 +28,6 @@ import {
   isChanged,
   parseBodyJson,
 } from "../../../common/utils/index.ts";
-import { generateProductCode } from "../utils/product.util.ts";
 import { generateSupplierCode } from "../../supplier/utils/supplier.util.ts";
 import type {
   RepositoryOption,
@@ -42,7 +41,7 @@ import { UserActivityType } from "../../../database/enums/user-activity.enum.ts"
 import { ProductWithSuppliers } from "../../../database/types/product.type.ts";
 import { PgTx } from "../../../database/custom/data-types.ts";
 
-@singleton()
+@injectable()
 export default class ProductHandler {
   constructor(
     @inject(ProductRepository) private productRepository: ProductRepository,
@@ -72,14 +71,11 @@ export default class ProductHandler {
       status,
     } = body;
 
-    const productCode = generateProductCode();
-
     // Start a transaction to handle both product and supplier relationships
     const result = await database.transaction(async (tx) => {
       // Create product first
       const { data: products } = await this.productRepository.createProduct(
         {
-          productCode,
           productName,
           sellingPrice,
           costPrice,
@@ -97,7 +93,7 @@ export default class ProductHandler {
         throw new Error("Can't create product");
       }
 
-      const productId = products[0].id;
+      const { id: productId, productCode } = products[0];
 
       // Create product-supplier relationships if suppliers are provided
       if (suppliers && suppliers.length > 0) {
@@ -147,7 +143,6 @@ export default class ProductHandler {
     const product = await this.getProductByIdentity(id, {
       select: {
         id: productTable.id,
-        productCode: productTable.productCode,
         inventory: productTable.inventory,
         costPrice: productTable.costPrice,
         sellingPrice: productTable.sellingPrice,
@@ -188,21 +183,12 @@ export default class ProductHandler {
 
       // Create inventory log
       if (isChanged(product.inventory, inventory)) {
-        const inventoryChange = product.inventory - (inventory as number);
-        const costPriceChange = product.costPrice - (costPrice as number);
-
-        await this.productInventoryLogRepository.createLog(
-          {
-            productId: id,
-            changeType: InventoryChangeType.MANUAL,
-            previousInventory: product.inventory,
-            inventoryChange,
-            currentInventory: inventory as number,
-            previousCostPrice: product.costPrice,
-            costPriceChange,
-            currentCostPrice: costPrice as number,
-            userId,
-          },
+        await this.createProductInventoryLog(
+          userId,
+          product,
+          inventory as number,
+          costPrice as number,
+          "",
           tx
         );
       }
@@ -230,8 +216,9 @@ export default class ProductHandler {
         tx
       );
       if (!product.length) {
-        throw new Error("Product not found");
+        throw new Error(`Product not found with id: ${id}`);
       }
+
       return product;
     });
 
@@ -243,14 +230,15 @@ export default class ProductHandler {
   }
 
   async getProductById(ctx: Context) {
-    const productId = ctx.req.param("id");
+    const identifier = ctx.req.param("id");
 
     const { data: product, error } =
-      await this.productRepository.findProductByIdentity(productId, {
+      await this.productRepository.findProductByIdentity(identifier, {
         select: {
           id: productTable.id,
           category: productTable.category,
           productCode: productTable.productCode,
+          code: sql`'NK' || LPAD(${productTable.productCode}::text, 5, '0')`,
           productName: productTable.productName,
           unit: productTable.unit,
           sellingPrice: productTable.sellingPrice,
@@ -304,7 +292,7 @@ export default class ProductHandler {
     if (keyword) {
       filters.push(
         or(
-          ilike(productTable.productCode, `%${keyword}%`),
+          ilike(sql`${productTable.productCode}::text`, `%${keyword}%`),
           ilike(productTable.productName, `%${keyword}%`)
         )
       );
@@ -346,6 +334,7 @@ export default class ProductHandler {
             id: productTable.id,
             category: productTable.category,
             productCode: productTable.productCode,
+            code: sql`'NK' || LPAD(${productTable.productCode}::text, 5, '0')`,
             productName: productTable.productName,
             unit: productTable.unit,
             sellingPrice: productTable.sellingPrice,
@@ -540,7 +529,6 @@ export default class ProductHandler {
             await database.transaction(async (tx) => {
               for (const batch of batches) {
                 const productsAsync = batch.map(async (row) => {
-                  const productCode = generateProductCode();
                   const costPrice = row["Giá vốn"];
                   const suppliers = row["Nhà Cung Cấp"];
                   let productSuppliers: InsertProductSupplier[] = [];
@@ -588,7 +576,6 @@ export default class ProductHandler {
                   }
 
                   const product: Record<string, string | number> = {
-                    productCode,
                     productName: row["Tên hàng"],
                     costPrice,
                     sellingPrice: row["Giá bán"],
@@ -701,6 +688,34 @@ export default class ProductHandler {
     });
   }
 
+  async createProductInventoryLog(
+    userId: string,
+    product: ProductWithSuppliers,
+    inventory: number,
+    costPrice?: number,
+    referenceId?: string,
+    tx?: PgTx
+  ) {
+    const inventoryChange = (inventory as number) - product.inventory;
+    const costPriceChange = (costPrice as number) - product.costPrice;
+
+    await this.productInventoryLogRepository.createLog(
+      {
+        productId: product.id,
+        changeType: InventoryChangeType.MANUAL,
+        previousInventory: product.inventory,
+        inventoryChange,
+        currentInventory: inventory as number,
+        previousCostPrice: product.costPrice,
+        costPriceChange,
+        currentCostPrice: costPrice as number,
+        referenceId,
+        userId,
+      },
+      tx
+    );
+  }
+
   /**
    * Private methods
    */
@@ -710,11 +725,18 @@ export default class ProductHandler {
     opts: Pick<RepositoryOption, "select"> & { withSuppliers?: boolean },
     tx?: PgTx
   ): Promise<ProductWithSuppliers> {
-    const { data: product } =
+    if (opts.select && !("code" in opts.select)) {
+      opts.select = {
+        ...opts.select,
+        code: sql`'NK' || LPAD(${productTable.productCode}::text, 5, '0')`,
+      };
+    }
+
+    const { data: product, error } =
       await this.productRepository.findProductByIdentity(identity, opts, tx);
 
-    if (!product) {
-      throw new Error(`Product not found with identity: ${identity}`);
+    if (error) {
+      throw new Error(error);
     }
 
     return product;

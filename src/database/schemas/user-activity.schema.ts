@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { DbTables } from "../../common/config/index.ts";
 import { userTable } from "./user.schema.ts";
 

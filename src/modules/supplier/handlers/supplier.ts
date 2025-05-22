@@ -1,4 +1,4 @@
-import { singleton, inject } from "tsyringe";
+import { inject, singleton } from "tsyringe";
 import { Context } from "hono";
 import { desc, eq, ilike, or } from "drizzle-orm";
 import dayjs from "dayjs";
@@ -12,8 +12,8 @@ import { ReceiptReturnRepository } from "../../../database/repositories/receipt-
 
 // SCHEMA
 import {
-  supplierTable,
   type InsertSupplier,
+  supplierTable,
   type UpdateSupplier,
 } from "../../../database/schemas/supplier.schema.ts";
 import { productTable } from "../../../database/schemas/product.schema.ts";
@@ -39,14 +39,12 @@ import { generateSupplierCode } from "../utils/supplier.util.ts";
 @singleton()
 export default class SupplierHandler {
   constructor(
-    @inject(SupplierRepository)
-    private supplierRepository: SupplierRepository,
-    @inject(ProductRepository)
-    private productRepository: ProductRepository,
-    @inject(ReceiptImportRepository)
-    private receiptImportRepository: ReceiptImportRepository,
-    @inject(ReceiptReturnRepository)
-    private receiptReturnRepository: ReceiptReturnRepository,
+    @inject(SupplierRepository) private supplierRepository: SupplierRepository,
+    @inject(ProductRepository) private productRepository: ProductRepository,
+    @inject(ReceiptImportRepository) private receiptImportRepository:
+      ReceiptImportRepository,
+    @inject(ReceiptReturnRepository) private receiptReturnRepository:
+      ReceiptReturnRepository,
   ) {}
 
   async createSupplier(ctx: Context) {
@@ -152,7 +150,7 @@ export default class SupplierHandler {
           createdAt: supplierTable.createdAt,
           updatedAt: supplierTable.updatedAt,
         },
-      }
+      },
     );
 
     if (!supplier) {
@@ -178,8 +176,8 @@ export default class SupplierHandler {
           ilike(supplierTable.code, `%${keyword}%`),
           ilike(supplierTable.name, `%${keyword}%`),
           ilike(supplierTable.email, `%${keyword}%`),
-          ilike(supplierTable.phone, `%${keyword}%`)
-        )
+          ilike(supplierTable.phone, `%${keyword}%`),
+        ),
       );
     }
 
@@ -192,8 +190,8 @@ export default class SupplierHandler {
       limit: +(query.limit || 10),
     });
 
-    const { data: suppliers, count } =
-      await this.supplierRepository.findSuppliersByCondition({
+    const { data: suppliers, count } = await this.supplierRepository
+      .findSuppliersByCondition({
         select: {
           id: supplierTable.id,
           code: supplierTable.code,
@@ -244,8 +242,8 @@ export default class SupplierHandler {
       limit: +(query.limit || 10),
     });
 
-    const { data: products, count } =
-      await this.productRepository.findProductsByCondition({
+    const { data: products, count } = await this.productRepository
+      .findProductsByCondition({
         select: {
           id: productTable.id,
           productCode: productTable.productCode,
@@ -284,8 +282,8 @@ export default class SupplierHandler {
       limit: +(query.limit || 10),
     });
 
-    const { data: receipts, count } =
-      await this.receiptImportRepository.findReceiptsImportByCondition({
+    const { data: receipts, count } = await this.receiptImportRepository
+      .findReceiptsImportByCondition({
         select: {
           id: receiptImportTable.id,
           receiptNumber: receiptImportTable.receiptNumber,
@@ -293,7 +291,7 @@ export default class SupplierHandler {
           totalProduct: receiptImportTable.totalProduct,
           totalAmount: receiptImportTable.totalAmount,
           paymentDate: receiptImportTable.paymentDate,
-          expectedImportDate: receiptImportTable.expectedImportDate,
+          importDate: receiptImportTable.importDate,
           status: receiptImportTable.status,
         },
         where: filters,
@@ -325,8 +323,8 @@ export default class SupplierHandler {
       limit: +(query.limit || 10),
     });
 
-    const { data: receipts, count } =
-      await this.receiptReturnRepository.findReceiptsReturnByCondition({
+    const { data: receipts, count } = await this.receiptReturnRepository
+      .findReceiptsReturnByCondition({
         select: {
           id: receiptReturnTable.id,
           receiptNumber: receiptReturnTable.receiptNumber,
@@ -389,7 +387,6 @@ export default class SupplierHandler {
             await database.transaction(async (tx) => {
               for (const batch of batches) {
                 const items = batch.map((row) => {
-
                   const item = {
                     code: generateSupplierCode(),
                     name: row["Tên nhà cung cấp"],
@@ -409,7 +406,7 @@ export default class SupplierHandler {
 
                 await this.supplierRepository.createSupplierOnConflictDoNothing(
                   items,
-                  tx
+                  tx,
                 );
               }
             });

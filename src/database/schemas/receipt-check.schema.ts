@@ -1,15 +1,15 @@
 import {
-  pgTable,
+  jsonb,
   pgEnum,
-  uuid,
+  pgTable,
   text,
   timestamp,
-  jsonb,
+  uuid,
 } from "drizzle-orm/pg-core";
 import { DbTables } from "../../common/config/index.ts";
-import { ReceiptCheckStatus } from "../../modules/receipt/enums/receipt.enum.ts";
 import { userTable } from "./user.schema.ts";
 import { supplierTable } from "./supplier.schema.ts";
+import { ReceiptCheckStatus } from "../enums/receipt.enum.ts";
 
 export const receiptCheckStatus = pgEnum(
   "receipt_check_status",

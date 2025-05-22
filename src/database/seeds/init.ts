@@ -5,8 +5,9 @@ import { UserRole } from "../enums/user.enum.ts";
 
 const DATABASE_URL = Deno.env.get("DATABASE_URL");
 
-if (!DATABASE_URL)
+if (!DATABASE_URL) {
   throw new Error("DATABASE_URL not found on .env");
+}
 
 async function main() {
   const usersData: (typeof userTable.$inferInsert)[] = [
@@ -16,7 +17,7 @@ async function main() {
       password: "$2a$10$yyqYbpadt.JmaPGYY.zgue2OwcCFMXuYk.zrDcegMYRPQjNgOP4A.",
       salt: "$2a$10$yyqYbpadt.JmaPGYY.zgue",
       fullname: "Developer",
-      role: UserRole.DEVELOPER
+      role: UserRole.DEVELOPER,
     },
     {
       code: customAlphabet("1234567890", 3)(),

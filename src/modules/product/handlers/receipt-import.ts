@@ -1,47 +1,174 @@
-import { singleton, inject } from "tsyringe";
+import { inject, injectable } from "tsyringe";
 import { Context } from "hono";
-import { between, desc, eq, ilike, or } from "drizzle-orm";
+import { between, desc, eq, ilike, or, sql } from "drizzle-orm";
 import dayjs from "dayjs";
 
-// REPOSITORY
 import { ReceiptImportRepository } from "../../../database/repositories/receipt-import.repository.ts";
 import { ReceiptItemRepository } from "../../../database/repositories/receipt-item.repository.ts";
+import { UserActivityRepository } from "../../../database/repositories/user-activity.repository.ts";
+import { ProductRepository } from "../../../database/repositories/product.repository.ts";
 
-// SCHEMA
 import {
+  ChangeLog,
   InsertReceiptImport,
   receiptImportTable,
+  SelectReceiptImport,
   UpdateReceiptImport,
 } from "../../../database/schemas/receipt-import.schema.ts";
 import { receiptItemTable } from "../../../database/schemas/receipt-item.schema.ts";
 import { supplierTable } from "../../../database/schemas/supplier.schema.ts";
+import { productTable } from "../../../database/schemas/product.schema.ts";
 
-// DTO
 import {
   CreateReceiptImportRequestDto,
   UpdateReceiptImportRequestDto,
 } from "../dtos/receipt-import.dto.ts";
+import { CreateReceiptItemRequestDto } from "../dtos/receipt-item.dto.ts";
 
+import { generateReceiptNumber } from "../utils/receipt-import.util.ts";
 import {
   getPagination,
   getPaginationMetadata,
   parseBodyJson,
+  removeEmptyProps,
 } from "../../../common/utils/index.ts";
 import { database } from "../../../common/config/database.ts";
-import { UserActivityRepository } from "../../../database/repositories/user-activity.repository.ts";
 import { PgTx } from "../../../database/custom/data-types.ts";
-import { UserActivityType } from "../../../database/enums/user-activity.enum.ts";
+import { RepositoryOption } from "../../../common/types/index.d.ts";
+import { ProductWithSuppliers } from "../../../database/types/product.type.ts";
 
-@singleton()
+import { UserActivityType } from "../../../database/enums/user-activity.enum.ts";
+import { ReceiptImportStatus } from "../../../database/enums/receipt.enum.ts";
+import { increment } from "../../../database/custom/helpers.ts";
+
+import ProductHandler from "./product.ts";
+
+@injectable()
 export default class ReceiptImportHandler {
   constructor(
     @inject(ReceiptImportRepository)
     private receiptRepository: ReceiptImportRepository,
     @inject(ReceiptItemRepository)
     private receiptItemRepository: ReceiptItemRepository,
+    @inject(ProductRepository) private productRepository: ProductRepository,
     @inject(UserActivityRepository)
-    private userActivityRepository: UserActivityRepository
+    private userActivityRepository: UserActivityRepository,
+    @inject(ProductHandler) private productHandler: ProductHandler,
   ) {}
+
+  async importProductQuickly(ctx: Context) {
+    const jwtPayload = ctx.get("jwtPayload");
+    const userId = jwtPayload.sub;
+
+    const body = await parseBodyJson<Record<string, string>>(ctx);
+    const { code } = body;
+
+    const receiptImport = await database.transaction(async (tx) => {
+      let { data: receiptImport } =
+        await this.receiptRepository.findReceiptsImportByStatus(
+          ReceiptImportStatus.PROCESSING,
+          userId,
+          {
+            select: {
+              id: receiptImportTable.id,
+              receiptNumber: receiptImportTable.receiptNumber,
+              status: receiptImportTable.status,
+            },
+          },
+          tx,
+        );
+
+      /**
+       * If there is no receipt import, create a new one
+       */
+      if (receiptImport.length) {
+        receiptImport = receiptImport[0];
+      } else {
+        const { data, error } =
+          await this.receiptRepository.createReceiptImport(
+            {
+              receiptNumber: generateReceiptNumber(),
+              status: ReceiptImportStatus.PROCESSING,
+              userCreated: userId,
+            },
+            tx,
+          );
+
+        if (error) {
+          throw new Error(error);
+        }
+
+        receiptImport = data;
+      }
+
+      if (!receiptImport) {
+        throw new Error("Can't create receipt import");
+      }
+
+      const product = await this.getProductByIdentity(
+        code,
+        {
+          select: {
+            id: productTable.id,
+            productCode: productTable.productCode,
+            productName: productTable.productName,
+            inventory: productTable.inventory,
+            costPrice: productTable.costPrice,
+          },
+        },
+        tx,
+      );
+
+      // Upsert receipt item
+      const {
+        id: productId,
+        productCode,
+        productName,
+        inventory,
+        costPrice,
+      } = product;
+
+      const receiptItemData = {
+        receiptId: receiptImport.id,
+        productId,
+        productCode,
+        productName,
+        costPrice,
+        inventory,
+        actualInventory: inventory + 1,
+      };
+
+      await Promise.all([
+        this.receiptItemRepository.upsertReceiptItemQuick(receiptItemData, tx),
+        this.productRepository.updateProduct(
+          {
+            set: {
+              inventory: increment(productTable.inventory),
+              updatedAt: dayjs().toISOString(),
+            },
+            where: [eq(productTable.id, productId)],
+          },
+          tx,
+        ),
+        this.productHandler.createProductInventoryLog(
+          userId,
+          product,
+          inventory + 1,
+          costPrice,
+          receiptImport.id,
+          tx,
+        ),
+      ]);
+
+      return receiptImport;
+    });
+
+    return ctx.json({
+      data: { id: receiptImport.id },
+      success: true,
+      statusCode: 200,
+    });
+  }
 
   async createReceipt(ctx: Context) {
     const jwtPayload = ctx.get("jwtPayload");
@@ -56,13 +183,13 @@ export default class ReceiptImportHandler {
       supplier,
       warehouse,
       paymentDate,
-      expectedImportDate,
+      importDate,
       status,
       items,
     } = body;
 
     const receiptId = await database.transaction(async (tx) => {
-      const receiptNumber = `NH${dayjs().format("YYMMDDHHmm")}`;
+      const receiptNumber = generateReceiptNumber();
       const receiptImportData: InsertReceiptImport = {
         receiptNumber,
         note,
@@ -72,32 +199,34 @@ export default class ReceiptImportHandler {
         supplier,
         warehouse,
         paymentDate,
-        expectedImportDate,
+        importDate,
         status,
         userCreated: userId,
       };
       const { data, error } = await this.receiptRepository.createReceiptImport(
         receiptImportData,
-        tx
+        tx,
       );
 
       if (error || !data) {
         throw new Error(error);
       }
 
-      // Create receipt items
+      // Create receipt items & user activity
       const receiptId = data.id;
-      await this.createReceiptItems(receiptId, items, tx);
 
-      await this.userActivityRepository.createActivity(
-        {
-          userId: userId,
-          description: `Vừa tạo 1 phiếu nhập ${receiptNumber}`,
-          type: UserActivityType.RECEIPT_IMPORT_CREATED,
-          referenceId: receiptId,
-        },
-        tx
-      );
+      await Promise.all([
+        this.createReceiptItems(receiptId, items, tx),
+        this.userActivityRepository.createActivity(
+          {
+            userId: userId,
+            description: `Vừa tạo 1 phiếu nhập ${receiptNumber}`,
+            type: UserActivityType.RECEIPT_IMPORT_CREATED,
+            referenceId: receiptId,
+          },
+          tx,
+        ),
+      ]);
 
       return receiptId;
     });
@@ -113,50 +242,58 @@ export default class ReceiptImportHandler {
     const jwtPayload = ctx.get("jwtPayload");
     const id = ctx.req.param("id");
     const body = await parseBodyJson<UpdateReceiptImportRequestDto>(ctx);
-    const { items, ...newReceiptImportData } = body;
+    const { items, ...newReceiptData } = body;
     const { fullname } = jwtPayload;
 
+    console.log({ items, newReceiptData });
+
+    const payloadUpdate = removeEmptyProps(newReceiptData);
     const dataUpdate: UpdateReceiptImport = {
-      ...newReceiptImportData,
+      ...payloadUpdate,
       updatedAt: dayjs().toISOString(),
     };
 
     await database.transaction(async (tx) => {
-      const { data: receipt } =
-        await this.receiptRepository.findReceiptImportById(id, {
-          select: {
-            status: receiptImportTable.status,
-            changeLog: receiptImportTable.changeLog,
+      const { data: receipt, error } =
+        await this.receiptRepository.findReceiptImportById(
+          id,
+          {
+            select: {
+              id: receiptImportTable.id,
+              status: receiptImportTable.status,
+              changeLog: receiptImportTable.changeLog,
+            },
           },
-        });
+          tx,
+        );
 
       if (!receipt) {
-        throw new Error("Receipt not found");
+        throw new Error(error);
       }
 
-      if (newReceiptImportData.status !== receipt.status) {
-        // Update status change logs
-        const changeLog = receipt.changeLog || [];
-        changeLog.push({
-          user: fullname,
-          oldStatus: receipt.status,
-          newStatus: newReceiptImportData.status,
-          timestamp: dayjs().toISOString(),
-        });
+      if (payloadUpdate.status && payloadUpdate.status !== receipt.status) {
+        const dataStatus = await this.handleReceiptStatusChange(
+          receipt,
+          payloadUpdate.status,
+          fullname,
+          tx,
+        );
 
-        dataUpdate.changeLog = changeLog;
+        dataUpdate.status = dataStatus.status;
+        dataUpdate.changeLog = dataStatus.changeLog;
       }
 
-      const { data } = await this.receiptRepository.updateReceiptImport(
-        {
-          set: dataUpdate,
-          where: [eq(receiptImportTable.id, id)],
-        },
-        tx
-      );
+      const { data, error: updateError } =
+        await this.receiptRepository.updateReceiptImport(
+          {
+            set: dataUpdate,
+            where: [eq(receiptImportTable.id, id)],
+          },
+          tx,
+        );
 
-      if (!data.length) {
-        throw new Error("Can't update receipt import");
+      if (!data) {
+        throw new Error(updateError);
       }
 
       if (items && items.length) {
@@ -164,16 +301,7 @@ export default class ReceiptImportHandler {
         await this.receiptItemRepository.deleteReceiptItemByReceiptId(id, tx);
 
         // Create receipt items
-        const receiptItemsData = items.map((item) => ({
-          ...item,
-          receiptId: id,
-        }));
-
-        // return ids[]
-        await this.receiptItemRepository.createReceiptItem(
-          receiptItemsData,
-          tx
-        );
+        await this.createReceiptItems(id, items, tx);
       }
     });
 
@@ -224,10 +352,11 @@ export default class ReceiptImportHandler {
           },
           warehouse: receiptImportTable.warehouse,
           paymentDate: receiptImportTable.paymentDate,
-          expectedImportDate: receiptImportTable.expectedImportDate,
+          importDate: receiptImportTable.importDate,
           changeLog: receiptImportTable.changeLog,
           status: receiptImportTable.status,
           createdAt: receiptImportTable.createdAt,
+          userCreated: receiptImportTable.userCreated,
         },
       });
 
@@ -239,9 +368,14 @@ export default class ReceiptImportHandler {
       await this.receiptItemRepository.findReceiptItemsByCondition({
         select: {
           id: receiptItemTable.id,
+          code: sql`'NK' || LPAD(${receiptItemTable.productCode}::text, 5, '0')`,
+          productId: receiptItemTable.productId,
           productCode: receiptItemTable.productCode,
           productName: receiptItemTable.productName,
           quantity: receiptItemTable.quantity,
+          inventory: receiptItemTable.inventory,
+          actualInventory: receiptItemTable.actualInventory,
+          discount: receiptItemTable.discount,
           costPrice: receiptItemTable.costPrice,
         },
         where: [eq(receiptItemTable.receiptId, receiptId)],
@@ -268,7 +402,7 @@ export default class ReceiptImportHandler {
             id: receiptImportTable.id,
             receiptNumber: receiptImportTable.receiptNumber,
           },
-        }
+        },
       );
 
     if (!receipt) {
@@ -279,9 +413,14 @@ export default class ReceiptImportHandler {
       await this.receiptItemRepository.findReceiptItemsByCondition({
         select: {
           id: receiptItemTable.id,
+          code: sql`'NK' || LPAD(${receiptItemTable.productCode}::text, 5, '0')`,
+          productId: receiptItemTable.productId,
           productCode: receiptItemTable.productCode,
           productName: receiptItemTable.productName,
           quantity: receiptItemTable.quantity,
+          inventory: receiptItemTable.inventory,
+          actualInventory: receiptItemTable.actualInventory,
+          discount: receiptItemTable.discount,
           costPrice: receiptItemTable.costPrice,
         },
         where: [eq(receiptItemTable.receiptId, receipt.id)],
@@ -307,8 +446,8 @@ export default class ReceiptImportHandler {
       filters.push(
         or(
           ilike(receiptImportTable.receiptNumber, `%${keyword}%`),
-          ilike(receiptImportTable.supplier, `%${keyword}%`)
-        )
+          ilike(receiptImportTable.supplier, `%${keyword}%`),
+        ),
       );
     }
 
@@ -319,7 +458,7 @@ export default class ReceiptImportHandler {
     if (importDate) {
       const start = dayjs(importDate).startOf("day").format();
       const end = dayjs(importDate).endOf("day").format();
-      filters.push(between(receiptImportTable.expectedImportDate, start, end));
+      filters.push(between(receiptImportTable.importDate, start, end));
     }
 
     const { page, limit, offset } = getPagination({
@@ -342,9 +481,10 @@ export default class ReceiptImportHandler {
           },
           warehouse: receiptImportTable.warehouse,
           paymentDate: receiptImportTable.paymentDate,
-          expectedImportDate: receiptImportTable.expectedImportDate,
+          importDate: receiptImportTable.importDate,
           status: receiptImportTable.status,
           createdAt: receiptImportTable.createdAt,
+          userCreated: receiptImportTable.userCreated,
         },
         where: filters,
         orderBy: [desc(receiptImportTable.createdAt)],
@@ -369,7 +509,7 @@ export default class ReceiptImportHandler {
 
     const total = await this.receiptRepository.getTotalImportsByDateRange(
       startDate,
-      endDate
+      endDate,
     );
 
     return ctx.json({
@@ -385,19 +525,123 @@ export default class ReceiptImportHandler {
 
   private async createReceiptItems(
     receiptId: string,
-    items: Array<{
-      productId: string;
-      productCode: string;
-      productName: string;
-      quantity: number;
-      costPrice: number;
-    }>,
-    tx: PgTx
+    items: Array<CreateReceiptItemRequestDto>,
+    tx: PgTx,
   ): Promise<void> {
     const receiptItemsData = items.map((item) => ({
-      ...item,
+      productId: item.id,
+      productCode: item.productCode,
+      productName: item.productName,
+      quantity: item.quantity,
+      inventory: item.inventory,
+      actualInventory: item.actualInventory,
+      discount: item.discount,
+      costPrice: item.costPrice,
       receiptId,
     }));
     await this.receiptItemRepository.createReceiptItem(receiptItemsData, tx);
+  }
+
+  private async getProductByIdentity(
+    identifier: string,
+    opts: Pick<RepositoryOption, "select"> & { withSuppliers?: boolean },
+    tx?: PgTx,
+  ): Promise<ProductWithSuppliers> {
+    if (opts.select && !("code" in opts.select)) {
+      opts.select = {
+        ...opts.select,
+        code: sql`'NK' || LPAD(${productTable.productCode}::text, 5, '0')`,
+      };
+    }
+
+    const { data: product, error } =
+      await this.productRepository.findProductByIdentity(identifier, opts, tx);
+
+    if (error) {
+      throw new Error(error);
+    }
+
+    return product;
+  }
+
+  private async getReceiptItemsByReceiptId(receiptId: string, tx?: PgTx) {
+    const { data: receiptItems } =
+      await this.receiptRepository.getReceiptItemsByReceiptId(
+        receiptId,
+        {
+          select: {
+            id: receiptItemTable.id,
+            productId: receiptItemTable.productId,
+            quantity: receiptItemTable.quantity,
+            costPrice: receiptItemTable.costPrice,
+          },
+        },
+        tx,
+      );
+
+    return receiptItems;
+  }
+
+  private async handleReceiptStatusChange(
+    receipt: SelectReceiptImport,
+    newStatus: ReceiptImportStatus,
+    fullname: string,
+    tx: PgTx,
+  ): Promise<{ changeLog: ChangeLog[]; status: ReceiptImportStatus }> {
+    switch (newStatus) {
+      case ReceiptImportStatus.WAITING: {
+        const receiptItems = await this.getReceiptItemsByReceiptId(
+          receipt.id,
+          tx,
+        );
+
+        if (!receiptItems.length) {
+          throw new Error("Không tìm thấy sản phẩm trong phiếu");
+        }
+
+        let totalQuantity = 0;
+        let totalProduct = 0;
+        let totalAmount = 0;
+
+        for (const item of receiptItems) {
+          totalQuantity += item.quantity;
+          totalProduct += 1;
+          totalAmount += item.costPrice * item.quantity;
+        }
+
+        const { error } = await this.receiptRepository.updateReceiptImport({
+          set: {
+            quantity: totalQuantity,
+            totalProduct,
+            totalAmount,
+          },
+          where: [eq(receiptImportTable.id, receipt.id)],
+        });
+
+        if (error) {
+          throw new Error(error);
+        }
+        break;
+      }
+      case ReceiptImportStatus.COMPLETED:
+        // TODO: create notification
+        break;
+      default:
+        break;
+    }
+
+    // Update status change logs
+    const changeLog = receipt.changeLog || [];
+    changeLog.push({
+      user: fullname,
+      oldStatus: receipt.status as ReceiptImportStatus,
+      newStatus,
+      timestamp: dayjs().toISOString(),
+    });
+
+    return {
+      changeLog,
+      status: newStatus,
+    };
   }
 }

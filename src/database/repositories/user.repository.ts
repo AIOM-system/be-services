@@ -1,4 +1,4 @@
-import { SQL, eq, and, isNull, desc, notInArray } from "drizzle-orm";
+import { and, desc, eq, isNull, notInArray, SQL } from "drizzle-orm";
 import { singleton } from "tsyringe";
 import { database } from "../../common/config/database.ts";
 import { InsertUser, SelectUser, userTable } from "../schemas/user.schema.ts";

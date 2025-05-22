@@ -14,8 +14,10 @@ export default class ActivityController {
   init(app: Hono) {
     const route = new Hono();
 
-    route.get("/recent", authenticate, (c) =>
-      this.activityHandler.getRecentActivities(c)
+    route.get(
+      "/recent",
+      authenticate,
+      (c) => this.activityHandler.getRecentActivities(c),
     );
 
     app.route(this.path, route);

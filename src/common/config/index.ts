@@ -20,7 +20,7 @@ const config = {
 
 // Validate the configuration
 const parsedConfig = configSchema.safeParse(config);
-console.log({ parsedConfig, config })
+console.log({ parsedConfig, config });
 
 if (!parsedConfig.success) {
   console.error("Invalid env:", parsedConfig.error.format());
@@ -40,6 +40,7 @@ export const DbTables = Object.freeze({
   ProductInventoryLogs: "product_inventory_logs",
   ProductSuppliers: "product_suppliers",
   UserActivities: "user_activities",
+  Notifications: "notifications",
 });
 
 export default parsedConfig.data;

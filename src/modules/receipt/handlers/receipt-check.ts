@@ -1,6 +1,6 @@
-import { singleton, inject } from "tsyringe";
+import { inject, singleton } from "tsyringe";
 import { Context } from "hono";
-import { sql, between, desc, eq, ilike, or, sum } from "drizzle-orm";
+import { between, desc, eq, ilike, or, sql, sum } from "drizzle-orm";
 import dayjs from "dayjs";
 
 // REPOSITORY
@@ -11,11 +11,11 @@ import { UserActivityRepository } from "../../../database/repositories/user-acti
 
 // SCHEMA
 import {
+  ActivityLog,
+  ChangeLog,
   InsertReceiptCheck,
   receiptCheckTable,
   UpdateReceiptCheck,
-  ChangeLog,
-  ActivityLog,
 } from "../../../database/schemas/receipt-check.schema.ts";
 import { receiptItemTable } from "../../../database/schemas/receipt-item.schema.ts";
 import { supplierTable } from "../../../database/schemas/supplier.schema.ts";
@@ -25,8 +25,8 @@ import { userTable } from "../../../database/schemas/user.schema.ts";
 // DTO
 import {
   CreateReceiptCheckRequestDto,
-  UpdateReceiptCheckRequestDto,
   UpdateBalanceReceiptRequestDto,
+  UpdateReceiptCheckRequestDto,
 } from "../dtos/receipt-check.dto.ts";
 
 import {
@@ -34,13 +34,16 @@ import {
   getPagination,
   getPaginationMetadata,
   parseBodyJson,
+  removeEmptyProps,
+  getNumberFromStringOrThrow,
 } from "../../../common/utils/index.ts";
 import { increment } from "../../../database/custom/helpers.ts";
 import { database } from "../../../common/config/database.ts";
 
-import { ReceiptCheckStatus } from "../enums/receipt.enum.ts";
 import { UserActivityType } from "../../../database/enums/user-activity.enum.ts";
 import { PgTx } from "../../../database/custom/data-types.ts";
+import { ReceiptCheckStatus } from "../../../database/enums/receipt.enum.ts";
+import { CreateReceiptItemRequestDto } from "../dtos/receipt-item.dto.ts";
 
 @singleton()
 export default class ReceiptCheckHandler {
@@ -49,10 +52,9 @@ export default class ReceiptCheckHandler {
     private receiptRepository: ReceiptCheckRepository,
     @inject(ReceiptItemRepository)
     private receiptItemRepository: ReceiptItemRepository,
-    @inject(ProductRepository)
-    private productRepository: ProductRepository,
+    @inject(ProductRepository) private productRepository: ProductRepository,
     @inject(UserActivityRepository)
-    private userActivityRepository: UserActivityRepository
+    private userActivityRepository: UserActivityRepository,
   ) {}
 
   async createReceipt(ctx: Context) {
@@ -76,7 +78,7 @@ export default class ReceiptCheckHandler {
       };
       const { data, error } = await this.receiptRepository.createReceiptCheck(
         receiptImportData,
-        tx
+        tx,
       );
 
       if (error || !data) {
@@ -95,7 +97,7 @@ export default class ReceiptCheckHandler {
           type: UserActivityType.RECEIPT_CHECK_CREATED,
           referenceId: receiptId,
         },
-        tx
+        tx,
       );
 
       return receiptId;
@@ -112,7 +114,7 @@ export default class ReceiptCheckHandler {
     changeLog: Array<ChangeLog> = [],
     oldStatus: ReceiptCheckStatus,
     newStatus: ReceiptCheckStatus,
-    user: string
+    user: string,
   ) {
     changeLog.push({
       user,
@@ -126,7 +128,7 @@ export default class ReceiptCheckHandler {
   updateActivityLog(
     oldActivities: ActivityLog[],
     dataUpdate: UpdateReceiptCheck,
-    user: string
+    user: string,
   ): ActivityLog[] {
     const newActivities = [
       ...(Array.isArray(oldActivities) ? oldActivities : []),
@@ -192,7 +194,7 @@ export default class ReceiptCheckHandler {
       }
 
       const dataUpdate: UpdateReceiptCheck = {
-        status: ReceiptCheckStatus.BALANCELLED,
+        status: ReceiptCheckStatus.BALANCED,
         updatedAt: dayjs().toISOString(),
       };
 
@@ -200,16 +202,16 @@ export default class ReceiptCheckHandler {
       const newChangeLog = this.addChangeLog(
         receipt.changeLog,
         receipt.status,
-        ReceiptCheckStatus.BALANCELLED,
-        fullname
+        ReceiptCheckStatus.BALANCED,
+        fullname,
       );
       dataUpdate.changeLog = newChangeLog;
 
       // Update activity logs
       dataUpdate.activityLog = this.updateActivityLog(
         receipt.activityLog,
-        { status: ReceiptCheckStatus.BALANCELLED },
-        fullname
+        { status: ReceiptCheckStatus.BALANCED },
+        fullname,
       );
 
       const { data: resultUpdateReceipt } =
@@ -218,7 +220,7 @@ export default class ReceiptCheckHandler {
             set: dataUpdate,
             where: [eq(receiptCheckTable.id, id)],
           },
-          tx
+          tx,
         );
 
       if (!resultUpdateReceipt.length) {
@@ -234,7 +236,7 @@ export default class ReceiptCheckHandler {
               updatedAt: dayjs().toISOString(),
             },
           },
-          tx
+          tx,
         );
       });
 
@@ -251,16 +253,17 @@ export default class ReceiptCheckHandler {
     const jwtPayload = ctx.get("jwtPayload");
     const id = ctx.req.param("id");
     const body = await parseBodyJson<UpdateReceiptCheckRequestDto>(ctx);
-    const { items, ...newReceiptCheckData } = body;
+    const { items, ...newReceiptData } = body;
     const { fullname } = jwtPayload;
 
+    const payloadUpdate = removeEmptyProps(newReceiptData);
     const dataUpdate: UpdateReceiptCheck = {
-      ...newReceiptCheckData,
+      ...payloadUpdate,
       updatedAt: dayjs().toISOString(),
     };
 
     await database.transaction(async (tx) => {
-      const { data: receipt } =
+      const { data: receipt, error } =
         await this.receiptRepository.findReceiptCheckById(id, {
           select: {
             status: receiptCheckTable.status,
@@ -269,30 +272,27 @@ export default class ReceiptCheckHandler {
           },
         });
 
-      if (!receipt) {
-        throw new Error("Receipt not found");
+      if (!receipt || error) {
+        throw new Error(error);
       }
 
       // Update change status log
-      if (
-        newReceiptCheckData.status &&
-        newReceiptCheckData.status !== receipt.status
-      ) {
+      if (payloadUpdate.status && payloadUpdate.status !== receipt.status) {
         const newChangeLog = this.addChangeLog(
           receipt.changeLog,
           receipt.status,
-          newReceiptCheckData.status,
-          fullname
+          payloadUpdate.status,
+          fullname,
         );
         dataUpdate.changeLog = newChangeLog;
       }
 
       // Update activity logs
-      if (getObjLength(newReceiptCheckData)) {
+      if (getObjLength(payloadUpdate)) {
         dataUpdate.activityLog = this.updateActivityLog(
           receipt.activityLog,
-          newReceiptCheckData,
-          fullname
+          payloadUpdate,
+          fullname,
         );
       }
 
@@ -301,7 +301,7 @@ export default class ReceiptCheckHandler {
           set: dataUpdate,
           where: [eq(receiptCheckTable.id, id)],
         },
-        tx
+        tx,
       );
 
       if (!data.length) {
@@ -313,13 +313,7 @@ export default class ReceiptCheckHandler {
         await this.receiptItemRepository.deleteReceiptItemByReceiptId(id, tx);
 
         // Create receipt items
-        const receiptItemsData = items.map((item) => ({
-          ...item,
-          receiptId: id,
-        }));
-
-        // return ids[]
-        this.receiptItemRepository.createReceiptItem(receiptItemsData, tx);
+        await this.createReceiptItems(id, items, tx);
       }
     });
 
@@ -374,7 +368,7 @@ export default class ReceiptCheckHandler {
           activityLog: receiptCheckTable.activityLog,
           createdAt: receiptCheckTable.createdAt,
         },
-      }
+      },
     );
 
     if (!receipt) {
@@ -393,7 +387,7 @@ export default class ReceiptCheckHandler {
           systemInventory: sum(receiptItemTable.inventory).mapWith(Number),
           actualInventory:
             sql<number>`COALESCE(SUM(${receiptItemTable.actualInventory}), 0)`.mapWith(
-              Number
+              Number,
             ),
         },
         where: [eq(receiptItemTable.receiptId, receiptId)],
@@ -420,7 +414,7 @@ export default class ReceiptCheckHandler {
             id: receiptCheckTable.id,
             receiptNumber: receiptCheckTable.receiptNumber,
           },
-        }
+        },
       );
 
     if (!receipt) {
@@ -460,8 +454,8 @@ export default class ReceiptCheckHandler {
       filters.push(
         or(
           ilike(receiptCheckTable.receiptNumber, `%${keyword}%`),
-          ilike(receiptCheckTable.note, `%${keyword}%`)
-        )
+          ilike(receiptCheckTable.note, `%${keyword}%`),
+        ),
       );
     }
 
@@ -503,15 +497,15 @@ export default class ReceiptCheckHandler {
           systemInventory: sum(receiptItemTable.inventory).mapWith(Number),
           actualInventory:
             sql<number>`COALESCE(SUM(${receiptItemTable.actualInventory}), 0)`.mapWith(
-              Number
+              Number,
             ),
           totalDifference:
             sql<number>`COALESCE(SUM(${receiptItemTable.actualInventory} - ${receiptItemTable.inventory}), 0)`.mapWith(
-              Number
+              Number,
             ),
           totalValueDifference:
             sql<number>`COALESCE(SUM((${receiptItemTable.actualInventory} - ${receiptItemTable.inventory}) * ${receiptItemTable.costPrice}), 0)`.mapWith(
-              Number
+              Number,
             ),
           date: receiptCheckTable.date,
           status: receiptCheckTable.status,
@@ -540,7 +534,7 @@ export default class ReceiptCheckHandler {
               systemInventory: sum(receiptItemTable.inventory).mapWith(Number),
               actualInventory:
                 sql<number>`COALESCE(SUM(${receiptItemTable.actualInventory}), 0)`.mapWith(
-                  Number
+                  Number,
                 ),
             },
             where: [eq(receiptItemTable.receiptId, receipt.id)],
@@ -570,10 +564,12 @@ export default class ReceiptCheckHandler {
     const receiptId = ctx.req.param("id");
     const productCode = ctx.req.param("productCode");
 
+    const code = getNumberFromStringOrThrow(productCode);
+
     await this.receiptItemRepository.updateReceiptItem({
       where: [
         eq(receiptItemTable.receiptId, receiptId),
-        eq(receiptItemTable.productCode, productCode),
+        eq(receiptItemTable.productCode, code),
       ],
       set: {
         actualInventory: increment(receiptItemTable.actualInventory),
@@ -592,17 +588,18 @@ export default class ReceiptCheckHandler {
 
   private async createReceiptItems(
     receiptId: string,
-    items: Array<{
-      productId: string;
-      productCode: string;
-      productName: string;
-      quantity: number;
-      costPrice: number;
-    }>,
-    tx: PgTx
+    items: Array<CreateReceiptItemRequestDto>,
+    tx: PgTx,
   ): Promise<void> {
     const receiptItemsData = items.map((item) => ({
-      ...item,
+      productId: item.productId,
+      productCode: item.productCode,
+      productName: item.productName,
+      quantity: item.quantity,
+      inventory: item.inventory,
+      actualInventory: item.actualInventory,
+      discount: item.discount,
+      costPrice: item.costPrice,
       receiptId,
     }));
     await this.receiptItemRepository.createReceiptItem(receiptItemsData, tx);

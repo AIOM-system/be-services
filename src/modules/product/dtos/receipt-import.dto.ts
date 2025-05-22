@@ -1,4 +1,4 @@
-import { ReceiptImportStatus } from "../../receipt/enums/receipt.enum.ts";
+import { ReceiptImportStatus } from "../../../database/enums/receipt.enum.ts";
 import {
   CreateReceiptItemRequestDto,
   UpdateReceiptItemRequestDto,
@@ -12,7 +12,7 @@ export interface CreateReceiptImportRequestDto {
   supplier: string;
   warehouse: string;
   paymentDate: string;
-  expectedImportDate: string;
+  importDate: string;
   status: ReceiptImportStatus;
   items: CreateReceiptItemRequestDto[];
 }
@@ -25,7 +25,7 @@ export interface UpdateReceiptImportRequestDto {
   supplier: string;
   warehouse: string;
   paymentDate: string;
-  expectedImportDate: string;
+  importDate: string;
   status: ReceiptImportStatus;
   items: UpdateReceiptItemRequestDto[];
 }

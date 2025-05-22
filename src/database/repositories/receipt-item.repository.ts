@@ -1,4 +1,4 @@
-import { SQL, eq, and, desc, sql } from "drizzle-orm";
+import { and, desc, eq, SQL, sql } from "drizzle-orm";
 import { singleton } from "tsyringe";
 import { database } from "../../common/config/database.ts";
 import {
@@ -7,17 +7,17 @@ import {
   RepositoryResult,
 } from "../../common/types/index.d.ts";
 import {
-  receiptItemTable,
   InsertReceiptItem,
-  UpdateReceiptItem,
+  receiptItemTable,
   SelectReceiptItem,
+  UpdateReceiptItem,
 } from "../schemas/receipt-item.schema.ts";
-import { PgTx } from "../custom/data-types.ts";
 import { receiptImportTable } from "../schemas/receipt-import.schema.ts";
 import { receiptReturnTable } from "../schemas/receipt-return.schema.ts";
 import { receiptCheckTable } from "../schemas/receipt-check.schema.ts";
 
-import { ReceiptImportStatus } from "../../modules/receipt/enums/receipt.enum.ts";
+import { PgTx } from "../custom/data-types.ts";
+import { ReceiptImportStatus } from "../enums/receipt.enum.ts";
 
 @singleton()
 export class ReceiptItemRepository {
@@ -34,12 +34,17 @@ export class ReceiptItemRepository {
         inventory: receiptItemTable.inventory,
         quantity: receiptItemTable.quantity,
       });
+
+    if (!result.length) {
+      return { data: null, error: "Can't create receipt item" };
+    }
+
     return { data: result, error: null };
   }
 
   async updateReceiptItem(
     opts: RepositoryOptionUpdate<Partial<UpdateReceiptItem>>,
-    tx?: PgTx
+    tx?: PgTx,
   ) {
     const db = tx || database;
     const filters: SQL[] = [...opts.where];
@@ -49,6 +54,36 @@ export class ReceiptItemRepository {
       .set(opts.set)
       .where(and(...filters))
       .returning({ id: receiptItemTable.id });
+
+    if (!result.length) {
+      return { data: null, error: "Can't update receipt item" };
+    }
+
+    return { data: result, error: null };
+  }
+
+  async upsertReceiptItemQuick(data: InsertReceiptItem, tx?: PgTx) {
+    const db = tx || database;
+    const result = await db
+      .insert(receiptItemTable)
+      .values(data)
+      .onConflictDoUpdate({
+        target: [receiptItemTable.receiptId, receiptItemTable.productCode],
+        set: {
+          quantity: sql`${receiptItemTable.quantity} + 1`,
+          updatedAt: sql`NOW()`,
+          ...(data.actualInventory && {
+            actualInventory: data.actualInventory,
+          }),
+          ...(data.inventory && { inventory: data.inventory }),
+          ...(data.costPrice && { costPrice: data.costPrice }),
+        },
+      })
+      .returning({ id: receiptItemTable.id });
+
+    if (!result.length) {
+      return { data: null, error: "Can't create receipt item" };
+    }
 
     return { data: result, error: null };
   }
@@ -60,12 +95,16 @@ export class ReceiptItemRepository {
       .where(eq(receiptItemTable.id, id))
       .returning({ id: receiptItemTable.id });
 
+    if (!result.length) {
+      return { data: null, error: "Can't delete receipt item" };
+    }
+
     return { data: result, error: null };
   }
 
   async deleteReceiptItemByReceiptId(
     receiptId: SelectReceiptItem["receiptId"],
-    tx?: PgTx
+    tx?: PgTx,
   ) {
     const db = tx || database;
     const result = await db
@@ -77,12 +116,14 @@ export class ReceiptItemRepository {
   }
 
   async findReceiptItemsByCondition(
-    opts: RepositoryOption
+    opts: RepositoryOption,
+    tx?: PgTx,
   ): Promise<RepositoryResult> {
     let count: number | null = null;
     const filters: SQL[] = [...opts.where];
 
-    const query = database
+    const db = tx || database;
+    const query = db
       .select(opts.select)
       .from(receiptItemTable)
       .groupBy(receiptItemTable.id)
@@ -112,7 +153,7 @@ export class ReceiptItemRepository {
 
   async findReceiptItemsByProduct(
     type: string,
-    opts: RepositoryOption
+    opts: RepositoryOption,
   ): Promise<RepositoryResult> {
     let count: number | null = null;
     const filters: SQL[] = [...opts.where];
@@ -125,21 +166,21 @@ export class ReceiptItemRepository {
         joinedTable = receiptImportTable;
         query.innerJoin(
           receiptImportTable,
-          eq(receiptItemTable.receiptId, receiptImportTable.id)
+          eq(receiptItemTable.receiptId, receiptImportTable.id),
         );
         break;
       case "return":
         joinedTable = receiptReturnTable;
         query.innerJoin(
           receiptReturnTable,
-          eq(receiptItemTable.receiptId, receiptReturnTable.id)
+          eq(receiptItemTable.receiptId, receiptReturnTable.id),
         );
         break;
       case "check":
         joinedTable = receiptCheckTable;
         query.innerJoin(
           receiptCheckTable,
-          eq(receiptItemTable.receiptId, receiptCheckTable.id)
+          eq(receiptItemTable.receiptId, receiptCheckTable.id),
         );
         break;
       default:
@@ -200,12 +241,14 @@ export class ReceiptItemRepository {
     const results = await database
       .select({
         date: sql<string>`DATE(${receiptItemTable.createdAt})`,
-        totalQuantity: sql<number>`COALESCE(SUM(${receiptItemTable.quantity}), 0)`,
+        totalQuantity: sql<
+          number
+        >`COALESCE(SUM(${receiptItemTable.quantity}), 0)`,
       })
       .from(receiptItemTable)
       .innerJoin(
         receiptImportTable,
-        eq(receiptItemTable.receiptId, receiptImportTable.id)
+        eq(receiptItemTable.receiptId, receiptImportTable.id),
       )
       .where(and(...filters))
       .groupBy(sql`DATE(${receiptItemTable.createdAt})`)

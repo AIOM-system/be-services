@@ -12,7 +12,7 @@ import { SupplierStatus } from "../../modules/supplier/enums/supplier.enum.ts";
 
 export const supplierStatus = pgEnum(
   "supplier_status",
-  Object.values(SupplierStatus) as [string, ...string[]]
+  Object.values(SupplierStatus) as [string, ...string[]],
 );
 
 export const supplierTable = pgTable(

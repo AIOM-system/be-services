@@ -1,4 +1,4 @@
-import { SQL, eq, and, desc, sql } from "drizzle-orm";
+import { and, desc, eq, SQL, sql } from "drizzle-orm";
 import { singleton } from "tsyringe";
 import { database } from "../../common/config/database.ts";
 import {
@@ -28,7 +28,7 @@ export class SupplierRepository {
 
   async updateSupplier(
     opts: RepositoryOptionUpdate<UpdateSupplier>,
-    tx?: PgTx
+    tx?: PgTx,
   ) {
     const db = tx || database;
     const filters: SQL[] = [...opts.where];
@@ -54,7 +54,7 @@ export class SupplierRepository {
 
   async findSupplierByName(
     name: string,
-    opts: Pick<RepositoryOption, "select">
+    opts: Pick<RepositoryOption, "select">,
   ): Promise<RepositoryResult> {
     const query = database
       .selectDistinct(opts.select)
@@ -67,7 +67,7 @@ export class SupplierRepository {
 
   async findSupplierById(
     id: SelectSupplier["id"],
-    opts: Pick<RepositoryOption, "select">
+    opts: Pick<RepositoryOption, "select">,
   ): Promise<RepositoryResult> {
     const query = database
       .selectDistinct(opts.select)
@@ -79,7 +79,7 @@ export class SupplierRepository {
   }
 
   async findSuppliersByCondition(
-    opts: RepositoryOption
+    opts: RepositoryOption,
   ): Promise<RepositoryResult> {
     let count: number | null = null;
     const filters: SQL[] = [...opts.where];

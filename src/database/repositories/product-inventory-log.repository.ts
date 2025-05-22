@@ -16,6 +16,11 @@ export class ProductInventoryLogRepository {
       .insert(productInventoryLogTable)
       .values(data)
       .returning();
+
+    if (!result.length) {
+      return { data: null, error: "Can't create product inventory log" };
+    }
+
     return { data: result[0], error: null };
   }
 
@@ -23,15 +28,17 @@ export class ProductInventoryLogRepository {
     const results = await database
       .select({
         changeType: productInventoryLogTable.changeType,
-        totalChange: sql<number>`SUM(${productInventoryLogTable.inventoryChange})`,
+        totalChange: sql<
+          number
+        >`SUM(${productInventoryLogTable.inventoryChange})`,
         count: sql<number>`COUNT(*)`,
       })
       .from(productInventoryLogTable)
       .where(
         and(
           sql`${productInventoryLogTable.createdAt}::date >= ${startDate}::date`,
-          sql`${productInventoryLogTable.createdAt}::date <= ${endDate}::date`
-        )
+          sql`${productInventoryLogTable.createdAt}::date <= ${endDate}::date`,
+        ),
       )
       .groupBy(productInventoryLogTable.changeType);
 
@@ -40,7 +47,7 @@ export class ProductInventoryLogRepository {
 
   async getInventoryByDateRange(
     startDate: string,
-    endDate: string
+    endDate: string,
   ): Promise<{ x: string; y: number }[]> {
     // Ensure dates are in correct format
     const start = new Date(startDate);
@@ -66,13 +73,9 @@ export class ProductInventoryLogRepository {
       .from(productInventoryLogTable)
       .where(
         and(
-          sql`${
-            productInventoryLogTable.createdAt
-          }::date >= ${start.toISOString()}::date`,
-          sql`${
-            productInventoryLogTable.createdAt
-          }::date <= ${end.toISOString()}::date`
-        )
+          sql`${productInventoryLogTable.createdAt}::date >= ${start.toISOString()}::date`,
+          sql`${productInventoryLogTable.createdAt}::date <= ${end.toISOString()}::date`,
+        ),
       )
       .groupBy(sql`DATE(${productInventoryLogTable.createdAt})`)
       .orderBy(sql`DATE(${productInventoryLogTable.createdAt})`);
@@ -124,7 +127,7 @@ export class ProductInventoryLogRepository {
 
   async getValueInventoryByDateRange(
     startDate: string,
-    endDate: string
+    endDate: string,
   ): Promise<{ x: string; y: number }[]> {
     // Ensure dates are in correct format
     const start = new Date(startDate);
@@ -147,13 +150,9 @@ export class ProductInventoryLogRepository {
       .from(productInventoryLogTable)
       .where(
         and(
-          sql`${
-            productInventoryLogTable.createdAt
-          }::date >= ${start.toISOString()}::date`,
-          sql`${
-            productInventoryLogTable.createdAt
-          }::date <= ${end.toISOString()}::date`
-        )
+          sql`${productInventoryLogTable.createdAt}::date >= ${start.toISOString()}::date`,
+          sql`${productInventoryLogTable.createdAt}::date <= ${end.toISOString()}::date`,
+        ),
       )
       .groupBy(sql`DATE(${productInventoryLogTable.createdAt})`)
       .orderBy(sql`DATE(${productInventoryLogTable.createdAt})`);

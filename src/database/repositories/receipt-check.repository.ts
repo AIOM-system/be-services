@@ -1,4 +1,4 @@
-import { SQL, eq, and, desc } from "drizzle-orm";
+import { and, desc, eq, SQL } from "drizzle-orm";
 import { singleton } from "tsyringe";
 import { database } from "../../common/config/database.ts";
 import {
@@ -37,7 +37,10 @@ export class ReceiptCheckRepository {
     return { data: result[0], error: null };
   }
 
-  async updateReceiptCheck(opts: RepositoryOptionUpdate<UpdateReceiptCheck>, tx?: PgTx) {
+  async updateReceiptCheck(
+    opts: RepositoryOptionUpdate<UpdateReceiptCheck>,
+    tx?: PgTx,
+  ) {
     const db = tx || database;
     const filters: SQL[] = [...opts.where];
 

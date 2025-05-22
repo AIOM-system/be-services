@@ -1,30 +1,30 @@
-import { singleton, inject } from "tsyringe";
+import { inject, injectable } from "tsyringe";
 import { Context } from "hono";
 import { eq } from "drizzle-orm";
 import dayjs from "dayjs";
 
-import { parseBodyJson } from "../../../common/utils/index.ts";
+import { parseBodyJson, removeEmptyProps } from "../../../common/utils/index.ts";
 import {
   InsertReceiptItem,
-  UpdateReceiptItem,
   receiptItemTable,
+  UpdateReceiptItem,
 } from "../../../database/schemas/receipt-item.schema.ts";
 import { ReceiptItemRepository } from "../../../database/repositories/receipt-item.repository.ts";
 
-@singleton()
+@injectable()
 export default class ReceiptItemHandler {
   constructor(
-    @inject(ReceiptItemRepository)
-    private receiptItemRepository: ReceiptItemRepository
+    @inject(ReceiptItemRepository) private receiptItemRepository:
+      ReceiptItemRepository,
   ) {}
 
   async createReceiptItem(ctx: Context) {
     const body = await parseBodyJson<InsertReceiptItem>(ctx);
 
-    const { data } = await this.receiptItemRepository.createReceiptItem([body]);
+    const { data, error } = await this.receiptItemRepository.createReceiptItem([body]);
 
-    if (!data.length) {
-      throw new Error("Can't create receipt item");
+    if (!data || error) {
+      throw new Error(error);
     }
 
     return ctx.json({
@@ -38,18 +38,19 @@ export default class ReceiptItemHandler {
     const id = ctx.req.param("id");
     const body = await parseBodyJson<UpdateReceiptItem>(ctx);
 
-    const dataUpdate: UpdateReceiptItem = {
-      ...body,
+    const payloadUpdate = removeEmptyProps(body as unknown as Record<string, unknown>);
+    const dataUpdate = {
+      ...payloadUpdate,
       updatedAt: dayjs().toISOString(),
     };
 
-    const { data } = await this.receiptItemRepository.updateReceiptItem({
+    const { data, error } = await this.receiptItemRepository.updateReceiptItem({
       set: dataUpdate,
       where: [eq(receiptItemTable.id, id)],
     });
 
-    if (!data.length) {
-      throw new Error("Can't update receipt item");
+    if (!data || error) {
+      throw new Error(error);
     }
 
     return ctx.json({
@@ -62,9 +63,9 @@ export default class ReceiptItemHandler {
   async deleteReceiptItem(ctx: Context) {
     const id = ctx.req.param("id");
 
-    const { data } = await this.receiptItemRepository.deleteReceiptItem(id);
-    if (!data.length) {
-      throw new Error("Receipt item not found");
+    const { data, error } = await this.receiptItemRepository.deleteReceiptItem(id);
+    if (!data || error) {
+      throw new Error(error);
     }
 
     return ctx.json({

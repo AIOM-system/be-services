@@ -1,5 +1,5 @@
 import { eq, ilike, or } from "drizzle-orm";
-import { singleton, inject } from "tsyringe";
+import { inject, injectable } from "tsyringe";
 import { Context } from "hono";
 import { nanoid } from "nanoid";
 import dayjs from "dayjs";
@@ -16,17 +16,17 @@ import { UserRepository } from "../../../database/repositories/user.repository.t
 import { userTable } from "../../../database/schemas/user.schema.ts";
 import { UserStatus } from "../../../database/enums/user.enum.ts";
 
-@singleton()
+@injectable()
 export default class UserHandler {
   constructor(@inject(UserRepository) private userRepository: UserRepository) {}
 
   async createUser(ctx: Context) {
     const body = await parseBodyJson<CreateUserDto>(ctx);
-    const { username, password, fullname, phone, role, storeCode, status } =
+    const { username, fullname, phone, role, storeCode, status } =
       body;
 
     const salt = bcrypt.genSaltSync(10);
-    const hashedPassword = bcrypt.hashSync(password, salt);
+    const hashedPassword = bcrypt.hashSync('1', salt);
     const code = customAlphabet("1234567890", 3)();
 
     const { data: newUser } = await this.userRepository.createUser({
@@ -107,7 +107,7 @@ export default class UserHandler {
       deletedAt: now,
       status: UserStatus.DELETED,
       username: `${user.username}__deleted__${now}`,
-    }
+    };
 
     const { data: deletedUsers } = await this.userRepository.updateUser({
       set: dataUpdate,
@@ -177,8 +177,8 @@ export default class UserHandler {
       limit: +(query.limit || 10),
     });
 
-    const { data: users, count } =
-      await this.userRepository.findUsersByCondition({
+    const { data: users, count } = await this.userRepository
+      .findUsersByCondition({
         select: {
           id: userTable.id,
           code: userTable.code,

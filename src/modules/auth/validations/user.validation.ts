@@ -5,10 +5,11 @@ import { StoreCode } from "../../../common/enums/index.ts";
 
 export const createUserSchema = z.object({
   username: z.string({ message: "Username must not be empty" }),
-  password: z.string({ message: "Password must not be empty" }),
   fullname: z.string({ message: "Fullname must not be empty" }),
   phone: z.string({ message: "Phone number must not be empty" }),
-  role: z.enum([UserRole.EMPLOYEE, UserRole.MANAGER], { message: "Role is invalid" }),
+  role: z.enum([UserRole.EMPLOYEE, UserRole.MANAGER], {
+    message: "Role is invalid",
+  }),
   storeCode: z.nativeEnum(StoreCode),
   status: z.nativeEnum(UserStatus, { message: "Status is invalid" }),
 }) satisfies ZodType<CreateUserDto>;

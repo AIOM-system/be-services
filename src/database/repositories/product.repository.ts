@@ -1,12 +1,12 @@
-import { SQL, eq, and, desc, sql, sum } from "drizzle-orm";
+import { and, desc, eq, SQL, sql, sum } from "drizzle-orm";
 import { singleton } from "tsyringe";
 import { database } from "../../common/config/database.ts";
 
 import {
   InsertProduct,
+  productTable,
   SelectProduct,
   UpdateProduct,
-  productTable,
 } from "../schemas/product.schema.ts";
 import { productInventoryLogTable } from "../schemas/product-inventory-log.schema.ts";
 import { productSupplierTable } from "../schemas/product-supplier.schema.ts";
@@ -18,6 +18,7 @@ import type {
 } from "../../common/types/index.d.ts";
 import { PgTx } from "../custom/data-types.ts";
 import { ProductWithSuppliers } from "../types/product.type.ts";
+import { getNumberFromStringOrThrow } from "../../common/utils/index.ts";
 
 @singleton()
 export class ProductRepository {
@@ -29,7 +30,10 @@ export class ProductRepository {
     const result = await db
       .insert(productTable)
       .values(data)
-      .returning({ id: productTable.id });
+      .returning({
+        id: productTable.id,
+        productCode: productTable.productCode,
+      });
     return { data: result, error: null };
   }
 
@@ -66,34 +70,39 @@ export class ProductRepository {
     tx?: PgTx,
   ): Promise<{ data: ProductWithSuppliers; error: string | null }> {
     const isUUID = identity.match(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
     );
     const column = isUUID ? productTable.id : productTable.productCode;
+    const identifier = isUUID ? identity : getNumberFromStringOrThrow(identity);
 
-    const query: any = tx || database
+    const db: any = tx || database;
+    const query = db
       .select(opts.select)
-      .from(productTable)
+      .from(productTable);
 
     if (opts.withSuppliers) {
       query.leftJoin(
         productSupplierTable,
-        eq(productSupplierTable.productId, productTable.id)
+        eq(productSupplierTable.productId, productTable.id),
       );
     }
 
-    query.where(eq(column, identity)).groupBy(productTable.id);
+    query.where(eq(column, identifier)).groupBy(productTable.id);
 
     const result = await query.execute();
 
     if (!result.length) {
-      return { data: result, error: `Product not found with identity: ${identity}` };
+      return {
+        data: result,
+        error: `Product not found with identity: ${identity}`,
+      };
     }
 
     return { data: result[0], error: null };
   }
 
   async findProductsByCondition(
-    opts: RepositoryOption & { withSuppliers?: boolean }
+    opts: RepositoryOption & { withSuppliers?: boolean },
   ): Promise<RepositoryResult<ProductWithSuppliers[]>> {
     let count: number | null = null;
     const filters: SQL[] = [...opts.where];
@@ -103,7 +112,7 @@ export class ProductRepository {
     if (opts.withSuppliers) {
       query.leftJoin(
         productSupplierTable,
-        eq(productSupplierTable.productId, productTable.id)
+        eq(productSupplierTable.productId, productTable.id),
       );
     }
 
@@ -135,7 +144,7 @@ export class ProductRepository {
 
   async updateProduct(
     opts: RepositoryOptionUpdate<Partial<UpdateProduct>>,
-    tx?: PgTx
+    tx?: PgTx,
   ) {
     const db = tx || database;
     const filters: SQL[] = [...opts.where];
@@ -157,9 +166,13 @@ export class ProductRepository {
     const db = tx || database;
 
     const [result] = await Promise.all([
-      db.delete(productTable).where(eq(productTable.id, id)).returning({ id: productTable.id }),
-      db.delete(productInventoryLogTable).where(eq(productInventoryLogTable.productId, id)),
-    ])
+      db.delete(productTable).where(eq(productTable.id, id)).returning({
+        id: productTable.id,
+      }),
+      db.delete(productInventoryLogTable).where(
+        eq(productInventoryLogTable.productId, id),
+      ),
+    ]);
 
     return { data: result, error: null };
   }
@@ -232,7 +245,7 @@ export class ProductRepository {
   async getTotalInventory() {
     const count = await database
       .select({
-        value: sql<number>`ROUND(COALESCE(SUM(${productTable.inventory}), 0))`
+        value: sql<number>`ROUND(COALESCE(SUM(${productTable.inventory}), 0))`,
       })
       .from(productTable)
       .execute();
@@ -247,7 +260,9 @@ export class ProductRepository {
   async getTotalValueInventory() {
     const count = await database
       .select({
-        value: sql<number>`coalesce(sum(${productTable.inventory} * ${productTable.costPrice}), 0)`,
+        value: sql<
+          number
+        >`coalesce(sum(${productTable.inventory} * ${productTable.costPrice}), 0)`,
       })
       .from(productTable)
       .execute();
@@ -294,7 +309,7 @@ export class ProductRepository {
     // Get total count for pagination
     const totalCount = await database.$count(
       productTable,
-      filters.length ? and(...filters) : undefined
+      filters.length ? and(...filters) : undefined,
     );
 
     // Get product inventory data with pagination

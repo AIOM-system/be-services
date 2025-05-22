@@ -1,4 +1,4 @@
-import { singleton, inject } from "tsyringe";
+import { inject, injectable } from "tsyringe";
 import { Context } from "hono";
 import { between, desc, eq, ilike, or } from "drizzle-orm";
 import dayjs from "dayjs";
@@ -26,16 +26,17 @@ import {
   getPagination,
   getPaginationMetadata,
   parseBodyJson,
+  removeEmptyProps,
 } from "../../../common/utils/index.ts";
 import { database } from "../../../common/config/database.ts";
 
-@singleton()
+@injectable()
 export default class ReceiptReturnHandler {
   constructor(
-    @inject(ReceiptReturnRepository)
-    private receiptRepository: ReceiptReturnRepository,
-    @inject(ReceiptItemRepository)
-    private receiptItemRepository: ReceiptItemRepository,
+    @inject(ReceiptReturnRepository) private receiptRepository:
+      ReceiptReturnRepository,
+    @inject(ReceiptItemRepository) private receiptItemRepository:
+      ReceiptItemRepository,
   ) {}
 
   async createReceipt(ctx: Context) {
@@ -110,14 +111,16 @@ export default class ReceiptReturnHandler {
     const body = await parseBodyJson<UpdateReceiptReturnRequestDto>(ctx);
     const { items, ...newReceiptReturnData } = body;
     const { fullname } = jwtPayload;
+
+    const payloadUpdate = removeEmptyProps(newReceiptReturnData);
     const dataUpdate: UpdateReceiptReturn = {
-      ...newReceiptReturnData,
+      ...payloadUpdate,
       updatedAt: dayjs().toISOString(),
     };
 
     await database.transaction(async (tx) => {
-      const { data: receipt } =
-        await this.receiptRepository.findReceiptReturnById(id, {
+      const { data: receipt } = await this.receiptRepository
+        .findReceiptReturnById(id, {
           select: {
             status: receiptReturnTable.status,
             changeLog: receiptReturnTable.changeLog,
@@ -128,13 +131,13 @@ export default class ReceiptReturnHandler {
         throw new Error("Receipt not found");
       }
 
-      if (newReceiptReturnData.status !== receipt.status) {
+      if (payloadUpdate.status && payloadUpdate.status !== receipt.status) {
         // Update status change logs
         const changeLog = receipt.changeLog || [];
         changeLog.push({
           user: fullname,
           oldStatus: receipt.status,
-          newStatus: newReceiptReturnData.status,
+          newStatus: payloadUpdate.status,
           timestamp: dayjs().toISOString(),
         });
 
@@ -200,8 +203,8 @@ export default class ReceiptReturnHandler {
   async getReceiptById(ctx: Context) {
     const receiptId = ctx.req.param("id");
 
-    const { data: receipt } =
-      await this.receiptRepository.findReceiptReturnById(receiptId, {
+    const { data: receipt } = await this.receiptRepository
+      .findReceiptReturnById(receiptId, {
         select: {
           id: receiptReturnTable.id,
           receiptNumber: receiptReturnTable.receiptNumber,
@@ -228,8 +231,8 @@ export default class ReceiptReturnHandler {
       throw new Error("receipt not found");
     }
 
-    const { data: receiptItems } =
-      await this.receiptItemRepository.findReceiptItemsByCondition({
+    const { data: receiptItems } = await this.receiptItemRepository
+      .findReceiptItemsByCondition({
         select: {
           id: receiptItemTable.id,
           productCode: receiptItemTable.productCode,
@@ -280,8 +283,8 @@ export default class ReceiptReturnHandler {
       limit: +(query.limit || 10),
     });
 
-    const { data: receipts, count } =
-      await this.receiptRepository.findReceiptsReturnByCondition({
+    const { data: receipts, count } = await this.receiptRepository
+      .findReceiptsReturnByCondition({
         select: {
           id: receiptReturnTable.id,
           receiptNumber: receiptReturnTable.receiptNumber,
@@ -321,8 +324,8 @@ export default class ReceiptReturnHandler {
   async getReceiptItemsByBarcode(ctx: Context) {
     const receiptNumber = ctx.req.param("receiptNumber");
 
-    const { data: receipt } =
-      await this.receiptRepository.findReceiptReturnByReceiptNumber(
+    const { data: receipt } = await this.receiptRepository
+      .findReceiptReturnByReceiptNumber(
         receiptNumber,
         {
           select: {
@@ -336,8 +339,8 @@ export default class ReceiptReturnHandler {
       throw new Error("receipt not found");
     }
 
-    const { data: receiptItems } =
-      await this.receiptItemRepository.findReceiptItemsByCondition({
+    const { data: receiptItems } = await this.receiptItemRepository
+      .findReceiptItemsByCondition({
         select: {
           id: receiptItemTable.id,
           productCode: receiptItemTable.productCode,

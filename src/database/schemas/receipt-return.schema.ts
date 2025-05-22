@@ -1,19 +1,19 @@
 import {
-  pgTable,
-  pgEnum,
-  uuid,
-  text,
-  timestamp,
   integer,
   jsonb,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
 } from "drizzle-orm/pg-core";
 import { DbTables } from "../../common/config/index.ts";
 import { customNumeric } from "../custom/data-types.ts";
+import { supplierTable } from "./supplier.schema.ts";
 import {
   ReceiptReturnStatus,
   ReceiptReturnType,
-} from "../../modules/receipt/enums/receipt.enum.ts";
-import { supplierTable } from "./supplier.schema.ts";
+} from "../enums/receipt.enum.ts";
 
 export const receiptReturnStatus = pgEnum(
   "receipt_return_status",

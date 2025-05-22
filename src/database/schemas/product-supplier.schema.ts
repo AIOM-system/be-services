@@ -1,4 +1,4 @@
-import { pgTable, uuid, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, timestamp, uuid } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
 import { DbTables } from "../../common/config/index.ts";
@@ -26,7 +26,10 @@ export type SelectProductSupplier = typeof productSupplierTable.$inferSelect;
 
 // Indexes for better query performance
 export const productSupplierIndexes = {
-  productIdIdx: sql`CREATE INDEX IF NOT EXISTS product_supplier_product_id_idx ON ${productSupplierTable} (product_id)`,
-  supplierIdIdx: sql`CREATE INDEX IF NOT EXISTS product_supplier_supplier_id_idx ON ${productSupplierTable} (supplier_id)`,
-  uniqueProductSupplierIdx: sql`CREATE UNIQUE INDEX IF NOT EXISTS product_supplier_unique_idx ON ${productSupplierTable} (product_id, supplier_id)`,
+  productIdIdx:
+    sql`CREATE INDEX IF NOT EXISTS product_supplier_product_id_idx ON ${productSupplierTable} (product_id)`,
+  supplierIdIdx:
+    sql`CREATE INDEX IF NOT EXISTS product_supplier_supplier_id_idx ON ${productSupplierTable} (supplier_id)`,
+  uniqueProductSupplierIdx:
+    sql`CREATE UNIQUE INDEX IF NOT EXISTS product_supplier_unique_idx ON ${productSupplierTable} (product_id, supplier_id)`,
 };

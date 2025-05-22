@@ -1,4 +1,4 @@
-import { ReceiptCheckStatus } from "../enums/receipt.enum.ts";
+import { ReceiptCheckStatus } from "../../../database/enums/receipt.enum.ts";
 import {
   CreateReceiptItemRequestDto,
   UpdateReceiptItemRequestDto,

@@ -4,7 +4,6 @@ import { UserStatus } from "../../../database/enums/user.enum.ts";
 
 export interface CreateUserDto {
   username: string;
-  password: string;
   fullname: string;
   phone: string;
   role: string;

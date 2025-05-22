@@ -1,4 +1,4 @@
-import { singleton, inject } from "tsyringe";
+import { inject, singleton } from "tsyringe";
 import { Context } from "hono";
 
 import { UserActivityRepository } from "../../../database/repositories/user-activity.repository.ts";
@@ -6,8 +6,8 @@ import { UserActivityRepository } from "../../../database/repositories/user-acti
 @singleton()
 export default class ActivityHandler {
   constructor(
-    @inject(UserActivityRepository)
-    private readonly repository: UserActivityRepository,
+    @inject(UserActivityRepository) private readonly repository:
+      UserActivityRepository,
   ) {}
 
   async getRecentActivities(ctx: Context) {

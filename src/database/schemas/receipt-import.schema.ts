@@ -1,16 +1,16 @@
 import {
-  pgTable,
-  pgEnum,
-  uuid,
-  text,
-  timestamp,
   integer,
   jsonb,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
 } from "drizzle-orm/pg-core";
 import { DbTables } from "../../common/config/index.ts";
 import { customNumeric } from "../custom/data-types.ts";
-import { ReceiptImportStatus } from "../../modules/receipt/enums/receipt.enum.ts";
 import { supplierTable } from "./supplier.schema.ts";
+import { ReceiptImportStatus } from "../enums/receipt.enum.ts";
 
 export const receiptImportStatus = pgEnum(
   "receipt_import_status",
@@ -31,15 +31,12 @@ export const receiptImportTable = pgTable(DbTables.ReceiptImports, {
   quantity: integer("quantity").default(0),
   totalProduct: integer("total_product").default(0),
   totalAmount: customNumeric("total_amount").default(0),
-  supplier: uuid("supplier")
-    .notNull()
-    .references(() => supplierTable.id),
+  supplier: uuid("supplier").references(() => supplierTable.id),
   warehouse: text("warehouse"),
   paymentDate: timestamp("payment_date", { mode: "string" }),
-  expectedImportDate: timestamp("expected_import_date", { mode: "string" }),
-  status: receiptImportStatus("status").notNull(),
+  importDate: timestamp("import_date", { mode: "string" }),
+  status: receiptImportStatus("status").default(ReceiptImportStatus.DRAFT),
   userCreated: uuid("user_created").notNull(),
-  statusChangeLogs: jsonb("status_change_logs"),
   changeLog: jsonb("change_logs").$type<ChangeLog[]>().default([]),
   createdAt: timestamp("created_at", { mode: "string" }).defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "string" }),

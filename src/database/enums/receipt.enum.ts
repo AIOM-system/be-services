@@ -1,6 +1,7 @@
 export enum ReceiptImportStatus {
   DRAFT = "draft",
   PROCESSING = "processing",
+  WAITING = "waiting",
   COMPLETED = "completed",
   CANCELLED = "cancelled",
   SHORT_RECEIVED = "short_received",
@@ -18,7 +19,7 @@ export enum ReceiptCheckStatus {
   PENDING = "pending",
   PROCESSING = "processing",
   BALANCING_REQUIRED = "balancing_required",
-  BALANCELLED = "balanced",
+  BALANCED = "balanced",
 }
 
 export enum ReceiptReturnType {

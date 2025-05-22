@@ -17,12 +17,16 @@ export default class ReceiptController {
     /**
      * RECEIPT CHECK
      */
-    route.post("/receipt-check", authenticate, (c) =>
-      this.receiptCheckHandler.createReceipt(c),
+    route.post(
+      "/receipt-check",
+      authenticate,
+      (c) => this.receiptCheckHandler.createReceipt(c),
     );
 
-    route.put("/receipt-check/:id", authenticate, (c) =>
-      this.receiptCheckHandler.updateReceipt(c),
+    route.put(
+      "/receipt-check/:id",
+      authenticate,
+      (c) => this.receiptCheckHandler.updateReceipt(c),
     );
 
     route.patch(
@@ -31,20 +35,28 @@ export default class ReceiptController {
       (c) => this.receiptCheckHandler.updateActualInventoryByReceiptItem(c),
     );
 
-    route.patch("/receipt-check/:id/balance", authenticate, (c) =>
-      this.receiptCheckHandler.updateBalanceReceipt(c),
+    route.patch(
+      "/receipt-check/:id/balance",
+      authenticate,
+      (c) => this.receiptCheckHandler.updateBalanceReceipt(c),
     );
 
-    route.delete("/receipt-check/:id", authenticate, (c) =>
-      this.receiptCheckHandler.deleteReceipt(c),
+    route.delete(
+      "/receipt-check/:id",
+      authenticate,
+      (c) => this.receiptCheckHandler.deleteReceipt(c),
     );
 
-    route.get("/receipt-check/:id", authenticate, (c) =>
-      this.receiptCheckHandler.getReceiptById(c),
+    route.get(
+      "/receipt-check/:id",
+      authenticate,
+      (c) => this.receiptCheckHandler.getReceiptById(c),
     );
 
-    route.get("/receipt-check", authenticate, (c) =>
-      this.receiptCheckHandler.getReceiptsByFilter(c),
+    route.get(
+      "/receipt-check",
+      authenticate,
+      (c) => this.receiptCheckHandler.getReceiptsByFilter(c),
     );
 
     route.get(

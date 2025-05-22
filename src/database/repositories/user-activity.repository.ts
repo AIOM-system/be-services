@@ -35,18 +35,18 @@ export class UserActivityRepository {
   async getActivitiesByDateRange(
     startDate: string,
     endDate: string,
-    userId?: string
+    userId?: string,
   ) {
     const whereClause = userId
       ? and(
-          sql`${userActivityTable.createdAt}::date >= ${startDate}::date`,
-          sql`${userActivityTable.createdAt}::date <= ${endDate}::date`,
-          sql`${userActivityTable.userId} = ${userId}`
-        )
+        sql`${userActivityTable.createdAt}::date >= ${startDate}::date`,
+        sql`${userActivityTable.createdAt}::date <= ${endDate}::date`,
+        sql`${userActivityTable.userId} = ${userId}`,
+      )
       : and(
-          sql`${userActivityTable.createdAt}::date >= ${startDate}::date`,
-          sql`${userActivityTable.createdAt}::date <= ${endDate}::date`
-        );
+        sql`${userActivityTable.createdAt}::date >= ${startDate}::date`,
+        sql`${userActivityTable.createdAt}::date <= ${endDate}::date`,
+      );
 
     const results = await database
       .select()

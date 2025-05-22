@@ -1,5 +1,4 @@
-import { sql } from "drizzle-orm";
-import { pgTable, pgEnum, uuid, timestamp } from "drizzle-orm/pg-core";
+import { pgEnum, pgTable, timestamp, uuid } from "drizzle-orm/pg-core";
 
 import { DbTables } from "../../common/config/index.ts";
 import { customNumeric } from "../custom/data-types.ts";
@@ -10,7 +9,7 @@ import { userTable } from "./user.schema.ts";
 
 export const inventoryChangeType = pgEnum(
   "inventory_change_type",
-  Object.values(InventoryChangeType) as [string, ...string[]]
+  Object.values(InventoryChangeType) as [string, ...string[]],
 );
 
 export const productInventoryLogTable = pgTable(DbTables.ProductInventoryLogs, {
@@ -41,7 +40,7 @@ export const productInventoryLogTable = pgTable(DbTables.ProductInventoryLogs, {
   userId: uuid("user_id")
     .notNull()
     .references(() => userTable.id),
-  createdAt: timestamp("created_at", { mode: "string" }).notNull().defaultNow(),
+  createdAt: timestamp("created_at", { mode: "string" }).defaultNow(),
 });
 
 export type InsertProductInventoryLog =

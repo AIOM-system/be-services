@@ -1,4 +1,4 @@
-import { eq, and, sql, SQL, isNull } from "drizzle-orm";
+import { and, eq, isNull, SQL, sql } from "drizzle-orm";
 import { singleton } from "tsyringe";
 
 import { database } from "../../common/config/database.ts";

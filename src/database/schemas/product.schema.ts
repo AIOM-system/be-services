@@ -1,10 +1,11 @@
-import { sql, SQL } from "drizzle-orm";
+import { SQL, sql } from "drizzle-orm";
 import {
-  pgTable,
+  integer,
   pgEnum,
-  uuid,
+  pgTable,
   text,
   timestamp,
+  uuid,
 } from "drizzle-orm/pg-core";
 import { DbTables } from "../../common/config/index.ts";
 import { customNumeric } from "../custom/data-types.ts";
@@ -17,7 +18,7 @@ export const productStatus = pgEnum(
 
 export const productTable = pgTable(DbTables.Products, {
   id: uuid("id").primaryKey().defaultRandom(),
-  productCode: text("product_code").unique().notNull(),
+  productCode: integer("product_code").generatedByDefaultAsIdentity().unique(),
   productName: text("product_name").notNull(),
   sellingPrice: customNumeric("selling_price").default(0),
   costPrice: customNumeric("cost_price").default(0),
@@ -36,6 +37,11 @@ export const productTable = pgTable(DbTables.Products, {
   updatedAt: timestamp("updated_at", { mode: "string" }),
 });
 
+// Add a function to format product code
+export function formatProductCode(productCode: number): string {
+  return `NK${String(productCode).padStart(5, "0")}`;
+}
+
 export type InsertProduct = typeof productTable.$inferInsert;
 export type SelectProduct = typeof productTable.$inferSelect;
 
@@ -44,8 +50,9 @@ interface ModifiedFields {
 }
 
 type UpdateProductType = Partial<
-  Omit<SelectProduct, "id" | "productCode" | "createdAt">
+  Omit<SelectProduct, "id" | "createdAt">
 >;
 
-export type UpdateProduct = Omit<UpdateProductType, keyof ModifiedFields> &
-  ModifiedFields;
+export type UpdateProduct =
+  & Omit<UpdateProductType, keyof ModifiedFields>
+  & ModifiedFields;

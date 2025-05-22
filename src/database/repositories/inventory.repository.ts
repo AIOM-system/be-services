@@ -88,8 +88,9 @@ export class InventoryRepository {
 
       // Calculate inventory turnover ratio
       // If average inventory is 0, return 0 to avoid division by zero
-      const turnoverRatio =
-        averageInventory > 0 ? Number(item.totalSold) / averageInventory : 0;
+      const turnoverRatio = averageInventory > 0
+        ? Number(item.totalSold) / averageInventory
+        : 0;
 
       return {
         x: item.productName,
@@ -233,16 +234,15 @@ export class InventoryRepository {
       productName: item.productName,
       currentInventory: Number(item.currentInventory),
       currentValueInventory: Number(item.currentValueInventory),
-      deadStockRatio:
-        Number(item.initialInventory) > 0
-          ? Number(
-              (
-                (Number(item.currentInventory) /
-                  Number(item.initialInventory)) *
-                100
-              ).toFixed(2)
-            )
-          : 0,
+      deadStockRatio: Number(item.initialInventory) > 0
+        ? Number(
+          (
+            (Number(item.currentInventory) /
+              Number(item.initialInventory)) *
+            100
+          ).toFixed(2),
+        )
+        : 0,
       lastMovementDate: item.lastMovementDate,
     }));
 
@@ -351,14 +351,16 @@ export class InventoryRepository {
 
       // Calculate inventory turnover
       // If average inventory is 0, set turnover to 0 to avoid division by zero
-      const inventoryTurnover =
-        averageInventory > 0 ? totalSupply / averageInventory : 0;
+      const inventoryTurnover = averageInventory > 0
+        ? totalSupply / averageInventory
+        : 0;
       console.log({ inventoryTurnover });
 
       // Calculate average days of inventory
       // If inventory turnover is 0, set to null to indicate infinite/unknown days
-      const averageDaysInventory =
-        inventoryTurnover > 0 ? Math.round(365 / inventoryTurnover) : null;
+      const averageDaysInventory = inventoryTurnover > 0
+        ? Math.round(365 / inventoryTurnover)
+        : null;
       console.log({ averageDaysInventory });
 
       // Calculate out of stock date

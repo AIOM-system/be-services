@@ -10,12 +10,14 @@
     "db:migrate": "deno --env -A --node-modules-dir npm:drizzle-kit migrate --config=drizzle-dev.config.ts",
     "db:seed": "deno run --env -A src/database/seeds/init.ts",
     "db:reset": "deno run --env -A src/database/seeds/reset.ts",
+    "db:drop": "dropdb --if-exists aiom_db && createdb aiom_db",
     "db:check": "deno run -A npm:drizzle-kit check --config=drizzle-dev.config.ts"
   },
   "compilerOptions": {
     "jsx": "precompile",
     "jsxImportSource": "hono/jsx",
     "noImplicitAny": false,
+    "nodeModulesDir": "auto",
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true
   },
@@ -27,6 +29,7 @@
     "drizzle-kit": "npm:drizzle-kit@^0.30.1",
     "drizzle-orm": "npm:drizzle-orm@^0.38.3",
     "drizzle-seed": "npm:drizzle-seed@^0.1.2",
+    "firebase-admin": "npm:firebase-admin@^13.3.0",
     "hono": "npm:hono@^4.6.5",
     "postgres": "npm:postgres@^3.4.4",
     "reflect-metadata": "npm:reflect-metadata@^0.2.2",

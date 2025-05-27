@@ -9,8 +9,8 @@ services:
     container_name: aiom-backend-app
     restart: unless-stopped
     env_file: .env
-    ports:
-      - "${DOCKER_APP_PORT}:${PORT}"
+    expose:
+      - ${PORT}
     depends_on:
       - postgres
     networks:

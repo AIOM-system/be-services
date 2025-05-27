@@ -74,7 +74,8 @@ const startServer = () => {
 
   Deno.serve(
     {
-      port: parseInt(Deno.env.get("PORT") || "2005"),
+      hostname: Deno.env.get("HOST") || "0.0.0.0",
+      port: parseInt(Deno.env.get("PORT") || "3005"),
     },
     app.fetch,
   );

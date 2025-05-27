@@ -10,8 +10,9 @@ services:
     restart: unless-stopped
     env_file: .env
     ports:
-      - 3005
-      - 80
+      - "${DOCKER_APP_PORT}:${PORT}"
+    expose:
+      - ${PORT}
     depends_on:
       - postgres
     networks:
@@ -31,9 +32,6 @@ services:
       - dokploy-network
     ports:
       - "${DOCKER_POSTGRES_PORT}:5432"
-
-volumes:
-  postgres-data:
 
 networks:
   dokploy-network:

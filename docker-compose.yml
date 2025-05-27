@@ -9,8 +9,9 @@ services:
     container_name: aiom-backend-app
     restart: unless-stopped
     env_file: .env
-    expose:
-      - ${PORT}
+    ports:
+      - 3005
+      - 80
     depends_on:
       - postgres
     networks:

@@ -4,12 +4,12 @@ import {
   pgEnum,
   pgTable,
   text,
-  timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
 import { DbTables } from "../../common/config/index.ts";
 import { customNumeric } from "../custom/data-types.ts";
 import { ProductStatus } from "../../modules/product/enums/product.enum.ts";
+import { timestampsWithDeletedAt } from "../custom/helpers.ts";
 
 export const productStatus = pgEnum(
   "product_status",
@@ -33,8 +33,7 @@ export const productTable = pgTable(DbTables.Products, {
     .default(sql`ARRAY[]::text[]`),
   warehouse: text("warehouse"),
   status: productStatus("status").notNull(),
-  createdAt: timestamp("created_at", { mode: "string" }).defaultNow(),
-  updatedAt: timestamp("updated_at", { mode: "string" }),
+  ...timestampsWithDeletedAt,
 });
 
 // Add a function to format product code
@@ -56,3 +55,11 @@ type UpdateProductType = Partial<
 export type UpdateProduct =
   & Omit<UpdateProductType, keyof ModifiedFields>
   & ModifiedFields;
+
+export type ProductWithSuppliers = SelectProduct & {
+  suppliers: Array<{
+    id: string;
+    name: string;
+    costPrice: number;
+  }>;
+};

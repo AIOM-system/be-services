@@ -1,10 +1,10 @@
-import { inject, singleton } from "tsyringe";
+import { inject, injectable } from "tsyringe";
 import { sendMulticastNotification, sendNotification } from "./firebase.ts";
 import { NotificationRepository } from "../../database/repositories/notification.repository.ts";
 import { InsertNotification } from "../../database/schemas/notification.schema.ts";
 import { PgTx } from "../../database/custom/data-types.ts";
 
-@singleton()
+@injectable()
 export class NotificationService {
   constructor(
     @inject(NotificationRepository) private notificationRepository:
@@ -19,7 +19,7 @@ export class NotificationService {
     deviceToken: string,
     title: string,
     body: string,
-    data?: Record<string, string>,
+    meta?: Record<string, string>,
     tx?: PgTx,
   ) {
     // Store notification in database
@@ -27,7 +27,7 @@ export class NotificationService {
       userId,
       title,
       body,
-      data,
+      meta,
     };
 
     const { data: savedNotification } = await this.notificationRepository
@@ -38,7 +38,7 @@ export class NotificationService {
 
     // Send push notification if device token is provided
     if (deviceToken) {
-      const result = await sendNotification(deviceToken, title, body, data);
+      const result = await sendNotification(deviceToken, title, body, meta);
       return {
         notification: savedNotification,
         pushResult: result,

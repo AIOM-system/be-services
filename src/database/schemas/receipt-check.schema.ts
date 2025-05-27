@@ -10,6 +10,7 @@ import { DbTables } from "../../common/config/index.ts";
 import { userTable } from "./user.schema.ts";
 import { supplierTable } from "./supplier.schema.ts";
 import { ReceiptCheckStatus } from "../enums/receipt.enum.ts";
+import { timestampsWithouDeletedAt } from "../custom/helpers.ts";
 
 export const receiptCheckStatus = pgEnum(
   "receipt_check_status",
@@ -45,9 +46,8 @@ export const receiptCheckTable = pgTable(DbTables.ReceiptChecks, {
     .references(() => userTable.id),
   changeLog: jsonb("change_logs").$type<ChangeLog[]>().default([]),
   activityLog: jsonb("activity_logs").$type<ActivityLog[]>().default([]),
-  userCreated: uuid("user_created").notNull(),
-  createdAt: timestamp("created_at", { mode: "string" }).defaultNow(),
-  updatedAt: timestamp("updated_at", { mode: "string" }),
+  userCreated: uuid("user_created").notNull().references(() => userTable.id),
+  ...timestampsWithouDeletedAt,
 });
 
 export type InsertReceiptCheck = typeof receiptCheckTable.$inferInsert;

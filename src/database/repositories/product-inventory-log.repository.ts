@@ -1,5 +1,5 @@
 import { and, sql } from "drizzle-orm";
-import { singleton } from "tsyringe";
+import { injectable } from "tsyringe";
 import { database } from "../../common/config/database.ts";
 import {
   InsertProductInventoryLog,
@@ -8,7 +8,7 @@ import {
 import { PgTx } from "../custom/data-types.ts";
 import { productTable } from "../schemas/product.schema.ts";
 
-@singleton()
+@injectable()
 export class ProductInventoryLogRepository {
   async createLog(data: InsertProductInventoryLog, tx?: PgTx) {
     const db = tx || database;

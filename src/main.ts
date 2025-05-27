@@ -1,4 +1,5 @@
 import "reflect-metadata";
+
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { requestId } from "hono/request-id";
@@ -17,6 +18,7 @@ import InventoryModule from "./modules/inventory/inventory.module.ts";
 import ReceiptModule from "./modules/receipt/receipt.module.ts";
 import SupplierModule from "./modules/supplier/supplier.module.ts";
 import ActivityModule from "./modules/activity/activity.module.ts";
+import OrderModule from "./modules/order/order.module.ts";
 
 // Utils
 import { isDev } from "./common/utils/index.ts";
@@ -37,6 +39,7 @@ const startServer = () => {
   ReceiptModule.init(app);
   SupplierModule.init(app);
   ActivityModule.init(app);
+  OrderModule.init(app);
 
   app.get("/ping", (c) => {
     return c.text("PONG!");

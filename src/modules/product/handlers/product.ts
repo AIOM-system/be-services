@@ -12,8 +12,9 @@ import { UserActivityRepository } from "../../../database/repositories/user-acti
 
 import {
   type InsertProduct,
-  productTable,
   type UpdateProduct,
+  type ProductWithSuppliers,
+  productTable,
 } from "../../../database/schemas/product.schema.ts";
 import { supplierTable } from "../../../database/schemas/supplier.schema.ts";
 import {
@@ -38,7 +39,6 @@ import { database } from "../../../common/config/database.ts";
 import { ProductStatus } from "../enums/product.enum.ts";
 import { InventoryChangeType } from "../../../database/enums/inventory.enum.ts";
 import { UserActivityType } from "../../../database/enums/user-activity.enum.ts";
-import { ProductWithSuppliers } from "../../../database/types/product.type.ts";
 import { PgTx } from "../../../database/custom/data-types.ts";
 
 @injectable()

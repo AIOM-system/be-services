@@ -17,7 +17,10 @@ import {
 } from "../../../database/schemas/receipt-import.schema.ts";
 import { receiptItemTable } from "../../../database/schemas/receipt-item.schema.ts";
 import { supplierTable } from "../../../database/schemas/supplier.schema.ts";
-import { productTable } from "../../../database/schemas/product.schema.ts";
+import {
+  type ProductWithSuppliers,
+  productTable,
+} from "../../../database/schemas/product.schema.ts";
 
 import {
   CreateReceiptImportRequestDto,
@@ -35,7 +38,6 @@ import {
 import { database } from "../../../common/config/database.ts";
 import { PgTx } from "../../../database/custom/data-types.ts";
 import { RepositoryOption } from "../../../common/types/index.d.ts";
-import { ProductWithSuppliers } from "../../../database/types/product.type.ts";
 
 import { UserActivityType } from "../../../database/enums/user-activity.enum.ts";
 import { ReceiptImportStatus } from "../../../database/enums/receipt.enum.ts";
@@ -53,7 +55,7 @@ export default class ReceiptImportHandler {
     @inject(ProductRepository) private productRepository: ProductRepository,
     @inject(UserActivityRepository)
     private userActivityRepository: UserActivityRepository,
-    @inject(ProductHandler) private productHandler: ProductHandler,
+    @inject(ProductHandler) private productHandler: ProductHandler
   ) {}
 
   async importProductQuickly(ctx: Context) {
@@ -75,7 +77,7 @@ export default class ReceiptImportHandler {
               status: receiptImportTable.status,
             },
           },
-          tx,
+          tx
         );
 
       /**
@@ -91,7 +93,7 @@ export default class ReceiptImportHandler {
               status: ReceiptImportStatus.PROCESSING,
               userCreated: userId,
             },
-            tx,
+            tx
           );
 
         if (error) {
@@ -116,7 +118,7 @@ export default class ReceiptImportHandler {
             costPrice: productTable.costPrice,
           },
         },
-        tx,
+        tx
       );
 
       // Upsert receipt item
@@ -148,7 +150,7 @@ export default class ReceiptImportHandler {
             },
             where: [eq(productTable.id, productId)],
           },
-          tx,
+          tx
         ),
         this.productHandler.createProductInventoryLog(
           userId,
@@ -156,7 +158,7 @@ export default class ReceiptImportHandler {
           inventory + 1,
           costPrice,
           receiptImport.id,
-          tx,
+          tx
         ),
       ]);
 
@@ -205,7 +207,7 @@ export default class ReceiptImportHandler {
       };
       const { data, error } = await this.receiptRepository.createReceiptImport(
         receiptImportData,
-        tx,
+        tx
       );
 
       if (error || !data) {
@@ -224,7 +226,7 @@ export default class ReceiptImportHandler {
             type: UserActivityType.RECEIPT_IMPORT_CREATED,
             referenceId: receiptId,
           },
-          tx,
+          tx
         ),
       ]);
 
@@ -264,7 +266,7 @@ export default class ReceiptImportHandler {
               changeLog: receiptImportTable.changeLog,
             },
           },
-          tx,
+          tx
         );
 
       if (!receipt) {
@@ -276,7 +278,7 @@ export default class ReceiptImportHandler {
           receipt,
           payloadUpdate.status,
           fullname,
-          tx,
+          tx
         );
 
         dataUpdate.status = dataStatus.status;
@@ -289,7 +291,7 @@ export default class ReceiptImportHandler {
             set: dataUpdate,
             where: [eq(receiptImportTable.id, id)],
           },
-          tx,
+          tx
         );
 
       if (!data) {
@@ -402,7 +404,7 @@ export default class ReceiptImportHandler {
             id: receiptImportTable.id,
             receiptNumber: receiptImportTable.receiptNumber,
           },
-        },
+        }
       );
 
     if (!receipt) {
@@ -446,8 +448,8 @@ export default class ReceiptImportHandler {
       filters.push(
         or(
           ilike(receiptImportTable.receiptNumber, `%${keyword}%`),
-          ilike(receiptImportTable.supplier, `%${keyword}%`),
-        ),
+          ilike(receiptImportTable.supplier, `%${keyword}%`)
+        )
       );
     }
 
@@ -509,7 +511,7 @@ export default class ReceiptImportHandler {
 
     const total = await this.receiptRepository.getTotalImportsByDateRange(
       startDate,
-      endDate,
+      endDate
     );
 
     return ctx.json({
@@ -526,7 +528,7 @@ export default class ReceiptImportHandler {
   private async createReceiptItems(
     receiptId: string,
     items: Array<CreateReceiptItemRequestDto>,
-    tx: PgTx,
+    tx: PgTx
   ): Promise<void> {
     const receiptItemsData = items.map((item) => ({
       productId: item.id,
@@ -545,7 +547,7 @@ export default class ReceiptImportHandler {
   private async getProductByIdentity(
     identifier: string,
     opts: Pick<RepositoryOption, "select"> & { withSuppliers?: boolean },
-    tx?: PgTx,
+    tx?: PgTx
   ): Promise<ProductWithSuppliers> {
     if (opts.select && !("code" in opts.select)) {
       opts.select = {
@@ -576,7 +578,7 @@ export default class ReceiptImportHandler {
             costPrice: receiptItemTable.costPrice,
           },
         },
-        tx,
+        tx
       );
 
     return receiptItems;
@@ -586,13 +588,13 @@ export default class ReceiptImportHandler {
     receipt: SelectReceiptImport,
     newStatus: ReceiptImportStatus,
     fullname: string,
-    tx: PgTx,
+    tx: PgTx
   ): Promise<{ changeLog: ChangeLog[]; status: ReceiptImportStatus }> {
     switch (newStatus) {
       case ReceiptImportStatus.WAITING: {
         const receiptItems = await this.getReceiptItemsByReceiptId(
           receipt.id,
-          tx,
+          tx
         );
 
         if (!receiptItems.length) {

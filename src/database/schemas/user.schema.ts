@@ -1,14 +1,13 @@
-import { sql } from "drizzle-orm";
 import {
   jsonb,
   pgEnum,
   pgTable,
   text,
-  timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
 import { DbTables } from "../../common/config/index.ts";
 import { UserRole, UserStatus } from "../enums/user.enum.ts";
+import { timestampsWithDeletedAt } from "../custom/helpers.ts";
 
 export const userStatus = pgEnum(
   "user_status",
@@ -20,23 +19,26 @@ export const userRole = pgEnum(
   Object.values(UserRole) as [string, ...string[]],
 );
 
+interface DeviceToken {
+  token: string;
+  deviceType: string;
+}
+
 export const userTable = pgTable(DbTables.Users, {
   id: uuid("id").primaryKey().defaultRandom(),
   code: text("code").unique(),
   username: text("username").unique(),
   password: text("password"),
   salt: text("salt"),
+  tokenVersion: text("token_version"),
   fullname: text("fullname"),
   phone: text("phone"),
   storeCode: text("store_code"),
   role: userRole("role"),
-  status: userStatus("status").notNull().default(UserStatus.ACTIVE),
-  tokenVersion: text("token_version"),
-  deviceTokens: text("device_tokens").array().default(sql`ARRAY[]::text[]`),
+  status: userStatus("status").default(UserStatus.ACTIVE),
+  deviceTokens: jsonb("device_tokens").$type<DeviceToken[]>().default([]),
   metadata: jsonb("metadata"),
-  createdAt: timestamp("created_at", { mode: "string" }).defaultNow(),
-  updatedAt: timestamp("updated_at", { mode: "string" }),
-  deletedAt: timestamp("deleted_at", { mode: "string" }),
+  ...timestampsWithDeletedAt,
 });
 
 export type InsertUser = typeof userTable.$inferInsert;

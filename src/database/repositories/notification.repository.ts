@@ -1,5 +1,5 @@
 import { and, eq, SQL, sql } from "drizzle-orm";
-import { singleton } from "tsyringe";
+import { injectable } from "tsyringe";
 import { database } from "../../common/config/database.ts";
 import {
   InsertNotification,
@@ -12,7 +12,7 @@ import {
   RepositoryResult,
 } from "../../common/types/index.d.ts";
 
-@singleton()
+@injectable()
 export class NotificationRepository {
   async createNotification(
     data: InsertNotification | InsertNotification[],

@@ -1,5 +1,5 @@
 import { and, desc, sql } from "drizzle-orm";
-import { singleton } from "tsyringe";
+import { injectable } from "tsyringe";
 import { database } from "../../common/config/database.ts";
 import {
   InsertUserActivity,
@@ -7,7 +7,7 @@ import {
 } from "../schemas/user-activity.schema.ts";
 import { PgTx } from "../custom/data-types.ts";
 
-@singleton()
+@injectable()
 export class UserActivityRepository {
   async createActivity(data: InsertUserActivity, tx?: PgTx) {
     const db = tx || database;

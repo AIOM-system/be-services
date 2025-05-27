@@ -15,12 +15,10 @@ export const inventoryChangeType = pgEnum(
 export const productInventoryLogTable = pgTable(DbTables.ProductInventoryLogs, {
   id: uuid("id").primaryKey().defaultRandom(),
 
-  // Product reference
   productId: uuid("product_id")
     .notNull()
     .references(() => productTable.id),
 
-  // Change details
   changeType: inventoryChangeType("change_type").notNull(),
 
   // Inventory changes
@@ -33,10 +31,8 @@ export const productInventoryLogTable = pgTable(DbTables.ProductInventoryLogs, {
   costPriceChange: customNumeric("cost_price_change"),
   currentCostPrice: customNumeric("current_cost_price"),
 
-  // Reference information
   referenceId: uuid("reference_id"), // ID of related document (receipt import, return, check)
 
-  // Audit fields
   userId: uuid("user_id")
     .notNull()
     .references(() => userTable.id),
@@ -47,11 +43,3 @@ export type InsertProductInventoryLog =
   typeof productInventoryLogTable.$inferInsert;
 export type SelectProductInventoryLog =
   typeof productInventoryLogTable.$inferSelect;
-
-// // Indexes for better query performance
-// export const productInventoryLogIndexes = {
-//   productIdIdx: sql`CREATE INDEX IF NOT EXISTS product_inventory_log_product_id_idx ON ${productInventoryLogTable} (product_id)`,
-//   createdAtIdx: sql`CREATE INDEX IF NOT EXISTS product_inventory_log_created_at_idx ON ${productInventoryLogTable} (created_at)`,
-//   changeTypeIdx: sql`CREATE INDEX IF NOT EXISTS product_inventory_log_change_type_idx ON ${productInventoryLogTable} (change_type)`,
-//   referenceIdIdx: sql`CREATE INDEX IF NOT EXISTS product_inventory_log_reference_id_idx ON ${productInventoryLogTable} (reference_id)`,
-// };

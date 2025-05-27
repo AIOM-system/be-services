@@ -1,5 +1,5 @@
 import { and, desc, eq, SQL, sql } from "drizzle-orm";
-import { singleton } from "tsyringe";
+import { injectable } from "tsyringe";
 import { database } from "../../common/config/database.ts";
 import {
   RepositoryOption,
@@ -14,7 +14,7 @@ import {
   UpdateSupplier,
 } from "../schemas/supplier.schema.ts";
 
-@singleton()
+@injectable()
 export class SupplierRepository {
   async createSupplier(data: InsertSupplier, tx?: PgTx) {
     const db = tx || database;

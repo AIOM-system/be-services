@@ -1,5 +1,5 @@
 import { and, eq, isNull, SQL, sql } from "drizzle-orm";
-import { singleton } from "tsyringe";
+import { injectable } from "tsyringe";
 
 import { database } from "../../common/config/database.ts";
 import { PgTx } from "../custom/data-types.ts";
@@ -14,7 +14,7 @@ interface OptionBase {
   limit?: number;
 }
 
-@singleton()
+@injectable()
 export class AuthRepository {
   async findUserByUsername(
     username: SelectUser["username"],

@@ -5,9 +5,12 @@ export default defineConfig({
   out: "./src/database/migrations",
   dialect: "postgresql",
   dbCredentials: {
-    url: Deno.env.get("DATABASE_URL") || "postgresql://localhost:5432/aiom_db",
+    url: "postgresql://localhost:5432/aiom_db",
   },
-  // migrations: {
-  //   schema: "public",
-  // },
+  migrations: {
+    table: "__drizzle_migrations",
+    schema: "public",
+  },
+  strict: true,
+  verbose: true,
 });

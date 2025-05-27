@@ -1,4 +1,4 @@
-import { SupplierStatus } from "../enums/supplier.enum.ts";
+import { SupplierStatus } from "../../../database/enums/supplier.enum.ts";
 
 export interface CreateSupplierRequestDto {
   name: string;

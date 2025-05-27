@@ -1,10 +1,10 @@
 export enum InventoryChangeType {
-  IMPORT = "IMPORT", // From import receipt
-  RETURN = "RETURN", // From return receipt
-  CHECK = "CHECK", // From inventory check
-  MANUAL = "MANUAL", // Manual adjustment
-  SYSTEM = "SYSTEM", // System adjustment
-  SALE = "SALE", // From sale receipt (negative inventory change)
+  IMPORT = "import", // From import receipt
+  RETURN = "return", // From return receipt
+  CHECK = "check", // From inventory check
+  MANUAL = "manual", // Manual adjustment
+  SYSTEM = "system", // System adjustment
+  SALE = "sale", // From sale receipt (negative inventory change)
 }
 
 export enum TopStockSortBy {

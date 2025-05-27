@@ -1,10 +1,11 @@
 import { and, desc, eq, SQL, sql, sum } from "drizzle-orm";
-import { singleton } from "tsyringe";
+import { injectable } from "tsyringe";
 import { database } from "../../common/config/database.ts";
 
 import {
   InsertProduct,
   productTable,
+  ProductWithSuppliers,
   SelectProduct,
   UpdateProduct,
 } from "../schemas/product.schema.ts";
@@ -17,10 +18,9 @@ import type {
   RepositoryResult,
 } from "../../common/types/index.d.ts";
 import { PgTx } from "../custom/data-types.ts";
-import { ProductWithSuppliers } from "../types/product.type.ts";
 import { getNumberFromStringOrThrow } from "../../common/utils/index.ts";
 
-@singleton()
+@injectable()
 export class ProductRepository {
   /**
    * PRODUCT

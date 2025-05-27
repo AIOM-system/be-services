@@ -1,5 +1,5 @@
 import { and, desc, eq, isNull, notInArray, SQL } from "drizzle-orm";
-import { singleton } from "tsyringe";
+import { injectable } from "tsyringe";
 import { database } from "../../common/config/database.ts";
 import { InsertUser, SelectUser, userTable } from "../schemas/user.schema.ts";
 import {
@@ -10,7 +10,7 @@ import {
 import { PgTx } from "../custom/data-types.ts";
 import { UserRole } from "../enums/user.enum.ts";
 
-@singleton()
+@injectable()
 export class UserRepository {
   /**
    * USER

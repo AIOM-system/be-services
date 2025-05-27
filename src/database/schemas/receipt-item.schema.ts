@@ -1,14 +1,15 @@
 import {
-  integer,
   pgTable,
+  integer,
   text,
-  timestamp,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { SQL } from "drizzle-orm";
+
 import { DbTables } from "../../common/config/index.ts";
 import { customNumeric } from "../custom/data-types.ts";
+import { timestampsWithouDeletedAt } from "../custom/helpers.ts";
 
 export const receiptItemTable = pgTable(DbTables.ReceiptItems, {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -19,10 +20,9 @@ export const receiptItemTable = pgTable(DbTables.ReceiptItems, {
   quantity: integer("quantity").default(1),
   inventory: customNumeric("inventory").default(0),
   actualInventory: customNumeric("actual_inventory").default(0),
-  discount: integer("discount").default(0),
+  discount: customNumeric("discount").default(0),
   costPrice: customNumeric("cost_price").default(0),
-  createdAt: timestamp("created_at", { mode: "string" }).defaultNow(),
-  updatedAt: timestamp("updated_at", { mode: "string" }),
+  ...timestampsWithouDeletedAt,
 }, (table) => ({
   uniqueReceiptProductIdx: uniqueIndex("receipt_item_unique_idx").on(
     table.receiptId,

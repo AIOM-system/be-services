@@ -17,10 +17,10 @@ const config = {
   authApiKey: Deno.env.get("AUTH_API_KEY"),
   databaseUrl: Deno.env.get("DATABASE_URL"),
 };
+console.log({ config });
 
 // Validate the configuration
 const parsedConfig = configSchema.safeParse(config);
-console.log({ parsedConfig, config });
 
 if (!parsedConfig.success) {
   console.error("Invalid env:", parsedConfig.error.format());
@@ -41,6 +41,7 @@ export const DbTables = Object.freeze({
   ProductSuppliers: "product_suppliers",
   UserActivities: "user_activities",
   Notifications: "notifications",
+  Orders: "orders",
 });
 
 export default parsedConfig.data;

@@ -9,11 +9,13 @@ import {
 } from "drizzle-orm/pg-core";
 import { DbTables } from "../../common/config/index.ts";
 import { customNumeric } from "../custom/data-types.ts";
+import { timestampsWithouDeletedAt } from "../custom/helpers.ts";
 import { supplierTable } from "./supplier.schema.ts";
 import {
   ReceiptReturnStatus,
   ReceiptReturnType,
 } from "../enums/receipt.enum.ts";
+import { userTable } from "./user.schema.ts";
 
 export const receiptReturnStatus = pgEnum(
   "receipt_return_status",
@@ -47,9 +49,8 @@ export const receiptReturnTable = pgTable(DbTables.ReceiptReturns, {
   type: receiptReturnType("type").notNull(),
   returnDate: timestamp("return_date", { mode: "string" }),
   changeLog: jsonb("change_logs").$type<ChangeLog[]>().default([]),
-  userCreated: uuid("user_created").notNull(),
-  createdAt: timestamp("created_at", { mode: "string" }).defaultNow(),
-  updatedAt: timestamp("updated_at", { mode: "string" }),
+  userCreated: uuid("user_created").notNull().references(() => userTable.id),
+  ...timestampsWithouDeletedAt,
 });
 
 export type InsertReceiptReturn = typeof receiptReturnTable.$inferInsert;

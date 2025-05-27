@@ -1,18 +1,9 @@
 import { inject, injectable } from "tsyringe";
 import { Context } from "hono";
-import { eq, isNull, sql } from "drizzle-orm";
 import dayjs from "dayjs";
 
-import { increment } from "../../../database/custom/helpers.ts";
 import { SortOrder } from "../../../database/enums/common.enum.ts";
-import {
-  InventoryChangeType,
-  TopStockSortBy,
-} from "../../../database/enums/inventory.enum.ts";
-
-import { receiptItemTable } from "../../../database/schemas/receipt-item.schema.ts";
-import { receiptImportTable } from "../../../database/schemas/receipt-import.schema.ts";
-import { productTable } from "../../../database/schemas/product.schema.ts";
+import { TopStockSortBy } from "../../../database/enums/inventory.enum.ts";
 
 import { ProductRepository } from "../../../database/repositories/product.repository.ts";
 import { ReceiptItemRepository } from "../../../database/repositories/receipt-item.repository.ts";
@@ -20,26 +11,22 @@ import { ReceiptImportRepository } from "../../../database/repositories/receipt-
 import { ReceiptReturnRepository } from "../../../database/repositories/receipt-return.repository.ts";
 import { ProductInventoryLogRepository } from "../../../database/repositories/product-inventory-log.repository.ts";
 import { InventoryRepository } from "../../../database/repositories/inventory.repository.ts";
-import { database } from "../../../common/config/database.ts";
-import { ReceiptImportStatus } from "../../../database/enums/receipt.enum.ts";
 
 @injectable()
 export default class InventoryHandler {
   constructor(
-    @inject(ReceiptImportRepository) private readonly receiptImportRepository:
-      ReceiptImportRepository,
-    @inject(ReceiptReturnRepository) private readonly receiptReturnRepository:
-      ReceiptReturnRepository,
-    @inject(ReceiptItemRepository) private readonly receiptItemRepository:
-      ReceiptItemRepository,
-    @inject(
-      ProductInventoryLogRepository,
-    ) private readonly productInventoryLogRepository:
-      ProductInventoryLogRepository,
-    @inject(ProductRepository) private readonly productRepository:
-      ProductRepository,
-    @inject(InventoryRepository) private readonly inventoryRepository:
-      InventoryRepository,
+    @inject(ReceiptImportRepository)
+    private readonly receiptImportRepository: ReceiptImportRepository,
+    @inject(ReceiptReturnRepository)
+    private readonly receiptReturnRepository: ReceiptReturnRepository,
+    @inject(ReceiptItemRepository)
+    private readonly receiptItemRepository: ReceiptItemRepository,
+    @inject(ProductInventoryLogRepository)
+    private readonly productInventoryLogRepository: ProductInventoryLogRepository,
+    @inject(ProductRepository)
+    private readonly productRepository: ProductRepository,
+    @inject(InventoryRepository)
+    private readonly inventoryRepository: InventoryRepository
   ) {}
 
   // async updateInventoryOfReceiptImport(ctx: Context) {
@@ -168,7 +155,7 @@ export default class InventoryHandler {
       this.productRepository.getTotalInventory(),
       this.productInventoryLogRepository.getInventoryByDateRange(
         startDate,
-        endDate,
+        endDate
       ),
     ]);
 
@@ -200,7 +187,7 @@ export default class InventoryHandler {
       this.productRepository.getTotalValueInventory(),
       this.productInventoryLogRepository.getValueInventoryByDateRange(
         startDate,
-        endDate,
+        endDate
       ),
     ]);
 
@@ -232,7 +219,7 @@ export default class InventoryHandler {
       this.receiptImportRepository.getTotalOfImportNew(),
       this.receiptImportRepository.getTotalImportsByDateRange(
         startDate,
-        endDate,
+        endDate
       ),
     ]);
 
@@ -264,7 +251,7 @@ export default class InventoryHandler {
       this.receiptReturnRepository.getTotalOfReturn(),
       this.receiptReturnRepository.getTotalReturnsByDateRange(
         startDate,
-        endDate,
+        endDate
       ),
     ]);
 
@@ -292,11 +279,11 @@ export default class InventoryHandler {
       endDate = end.toISOString().split("T")[0];
     }
 
-    const dataset = await this.receiptItemRepository
-      .getImportProductsByDateRange(
+    const dataset =
+      await this.receiptItemRepository.getImportProductsByDateRange(
         startDate,
         endDate,
-        productId,
+        productId
       );
 
     return ctx.json({
@@ -310,8 +297,8 @@ export default class InventoryHandler {
     const query = ctx.req.query();
     const { category } = query;
 
-    const totalInventory = await this.productRepository
-      .getTotalProductInventoryByCategory(category);
+    const totalInventory =
+      await this.productRepository.getTotalProductInventoryByCategory(category);
 
     return ctx.json({
       data: totalInventory,
@@ -329,7 +316,7 @@ export default class InventoryHandler {
         category,
         page: page ? parseInt(page) : 1,
         limit: limit ? parseInt(limit) : 10,
-      },
+      }
     );
 
     // Calculate pagination metadata
@@ -363,8 +350,8 @@ export default class InventoryHandler {
       endDate = end.toISOString().split("T")[0];
     }
 
-    const { data, total } = await this.inventoryRepository
-      .getInventoryTurnoverDataset({
+    const { data, total } =
+      await this.inventoryRepository.getInventoryTurnoverDataset({
         startDate,
         endDate,
         page: page ? parseInt(page) : 1,
@@ -394,14 +381,14 @@ export default class InventoryHandler {
 
     // Validate sort parameters
     const validSortBy = Object.values(TopStockSortBy).includes(
-        sortBy as TopStockSortBy,
-      )
+      sortBy as TopStockSortBy
+    )
       ? (sortBy as TopStockSortBy)
       : TopStockSortBy.INVENTORY;
 
     const validSortOrder = Object.values(SortOrder).includes(
-        sortOrder as SortOrder,
-      )
+      sortOrder as SortOrder
+    )
       ? (sortOrder as SortOrder)
       : SortOrder.DESC;
 
@@ -434,7 +421,7 @@ export default class InventoryHandler {
           message: "Invalid month. Month must be between 1 and 12",
           statusCode: 400,
         },
-        400,
+        400
       );
     }
 
@@ -443,9 +430,8 @@ export default class InventoryHandler {
     const currentYear = now.getFullYear();
 
     // If specified month is greater than current month, use previous year
-    const year = monthNumber > now.getMonth() + 1
-      ? currentYear - 1
-      : currentYear;
+    const year =
+      monthNumber > now.getMonth() + 1 ? currentYear - 1 : currentYear;
 
     // Set start date to beginning of specified month
     const startDate = new Date(year, monthNumber - 1, 1)
@@ -455,8 +441,8 @@ export default class InventoryHandler {
     // Set end date to current date
     const endDate = now.toISOString().split("T")[0];
 
-    const { data, total } = await this.inventoryRepository
-      .getDeadStockInventory({
+    const { data, total } =
+      await this.inventoryRepository.getDeadStockInventory({
         startDate,
         endDate,
         page: page ? parseInt(page) : 1,

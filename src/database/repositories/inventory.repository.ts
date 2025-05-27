@@ -1,4 +1,4 @@
-import { singleton } from "tsyringe";
+import { injectable } from "tsyringe";
 import { database } from "../../common/config/database.ts";
 import { productTable } from "../schemas/product.schema.ts";
 import { desc, sql } from "drizzle-orm";
@@ -9,7 +9,7 @@ import {
 } from "../enums/inventory.enum.ts";
 import { SortOrder } from "../enums/common.enum.ts";
 
-@singleton()
+@injectable()
 export class InventoryRepository {
   async getInventoryTurnoverDataset(opts: {
     startDate: string;

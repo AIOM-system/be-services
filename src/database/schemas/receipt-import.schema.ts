@@ -7,10 +7,14 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+
 import { DbTables } from "../../common/config/index.ts";
-import { customNumeric } from "../custom/data-types.ts";
-import { supplierTable } from "./supplier.schema.ts";
 import { ReceiptImportStatus } from "../enums/receipt.enum.ts";
+import { customNumeric } from "../custom/data-types.ts";
+import { timestampsWithouDeletedAt } from "../custom/helpers.ts";
+
+import { supplierTable } from "./supplier.schema.ts";
+import { userTable } from "./user.schema.ts";
 
 export const receiptImportStatus = pgEnum(
   "receipt_import_status",
@@ -36,10 +40,9 @@ export const receiptImportTable = pgTable(DbTables.ReceiptImports, {
   paymentDate: timestamp("payment_date", { mode: "string" }),
   importDate: timestamp("import_date", { mode: "string" }),
   status: receiptImportStatus("status").default(ReceiptImportStatus.DRAFT),
-  userCreated: uuid("user_created").notNull(),
+  userCreated: uuid("user_created").notNull().references(() => userTable.id),
   changeLog: jsonb("change_logs").$type<ChangeLog[]>().default([]),
-  createdAt: timestamp("created_at", { mode: "string" }).defaultNow(),
-  updatedAt: timestamp("updated_at", { mode: "string" }),
+  ...timestampsWithouDeletedAt,
 });
 
 export type InsertReceiptImport = typeof receiptImportTable.$inferInsert;

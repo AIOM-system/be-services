@@ -31,10 +31,10 @@ import {
   getPaginationMetadata,
   parseBodyJson,
 } from "../../../common/utils/index.ts";
-import { SupplierStatus } from "../enums/supplier.enum.ts";
 import { ResponseType } from "../../../common/types/index.d.ts";
 import { database } from "../../../common/config/database.ts";
 import { generateSupplierCode } from "../utils/supplier.util.ts";
+import { SupplierStatus } from "../../../database/enums/supplier.enum.ts";
 
 @singleton()
 export default class SupplierHandler {

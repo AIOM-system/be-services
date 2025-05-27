@@ -1,5 +1,5 @@
 import { and, desc, eq, SQL } from "drizzle-orm";
-import { singleton } from "tsyringe";
+import { injectable } from "tsyringe";
 import { database } from "../../common/config/database.ts";
 import {
   RepositoryOption,
@@ -18,7 +18,7 @@ import { receiptItemTable } from "../schemas/receipt-item.schema.ts";
 
 import { PgTx } from "../custom/data-types.ts";
 
-@singleton()
+@injectable()
 export class ReceiptCheckRepository {
   /**
    * RECEIPT CHECK

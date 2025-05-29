@@ -4,7 +4,7 @@ export enum InventoryChangeType {
   CHECK = "check", // From inventory check
   MANUAL = "manual", // Manual adjustment
   SYSTEM = "system", // System adjustment
-  SALE = "sale", // From sale receipt (negative inventory change)
+  ORDER = "order", // From order (negative inventory change)
 }
 
 export enum TopStockSortBy {

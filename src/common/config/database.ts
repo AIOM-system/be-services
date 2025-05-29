@@ -1,5 +1,6 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
+import { isDev } from "../utils/index.ts";
 
 const DATABASE_URL = Deno.env.get("DATABASE_URL");
 
@@ -20,5 +21,5 @@ const client = postgres(DATABASE_URL, {
 export const database = drizzle({
   client,
   casing: "snake_case",
-  logger: true,
+  logger: isDev()
 });

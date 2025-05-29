@@ -8,8 +8,8 @@ import {
 
 import { DbTables } from "../../common/config/index.ts";
 import { customNumeric } from "../custom/data-types.ts";
-import type { OrderItem, VatInfo } from "../../common/types/order.d.ts";
 import { timestampsWithouDeletedAt } from "../custom/helpers.ts";
+import type { OrderItem, VatInfo } from "../../common/types/order.d.ts";
 import { OrderStatus, PaymentMethod } from "../enums/order.enum.ts";
 
 export const orderStatus = pgEnum(

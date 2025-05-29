@@ -6,7 +6,6 @@ import dayjs from "dayjs";
 import { ReceiptImportRepository } from "../../../database/repositories/receipt-import.repository.ts";
 import { ReceiptItemRepository } from "../../../database/repositories/receipt-item.repository.ts";
 import { UserActivityRepository } from "../../../database/repositories/user-activity.repository.ts";
-import { ProductRepository } from "../../../database/repositories/product.repository.ts";
 
 import {
   ChangeLog,
@@ -17,10 +16,7 @@ import {
 } from "../../../database/schemas/receipt-import.schema.ts";
 import { receiptItemTable } from "../../../database/schemas/receipt-item.schema.ts";
 import { supplierTable } from "../../../database/schemas/supplier.schema.ts";
-import {
-  type ProductWithSuppliers,
-  productTable,
-} from "../../../database/schemas/product.schema.ts";
+import { productTable } from "../../../database/schemas/product.schema.ts";
 
 import {
   CreateReceiptImportRequestDto,
@@ -35,13 +31,13 @@ import {
   parseBodyJson,
   removeEmptyProps,
 } from "../../../common/utils/index.ts";
+import { getCurrentISODate } from "../../../common/utils/date.ts";
 import { database } from "../../../common/config/database.ts";
 import { PgTx } from "../../../database/custom/data-types.ts";
-import { RepositoryOption } from "../../../common/types/index.d.ts";
 
 import { UserActivityType } from "../../../database/enums/user-activity.enum.ts";
 import { ReceiptImportStatus } from "../../../database/enums/receipt.enum.ts";
-import { increment } from "../../../database/custom/helpers.ts";
+import { InventoryChangeType } from "../../../database/enums/inventory.enum.ts";
 
 import ProductHandler from "./product.ts";
 
@@ -52,7 +48,6 @@ export default class ReceiptImportHandler {
     private receiptRepository: ReceiptImportRepository,
     @inject(ReceiptItemRepository)
     private receiptItemRepository: ReceiptItemRepository,
-    @inject(ProductRepository) private productRepository: ProductRepository,
     @inject(UserActivityRepository)
     private userActivityRepository: UserActivityRepository,
     @inject(ProductHandler) private productHandler: ProductHandler
@@ -107,7 +102,7 @@ export default class ReceiptImportHandler {
         throw new Error("Can't create receipt import");
       }
 
-      const product = await this.getProductByIdentity(
+      const product = await this.productHandler.getProductByIdentity(
         code,
         {
           select: {
@@ -142,24 +137,15 @@ export default class ReceiptImportHandler {
 
       await Promise.all([
         this.receiptItemRepository.upsertReceiptItemQuick(receiptItemData, tx),
-        this.productRepository.updateProduct(
-          {
-            set: {
-              inventory: increment(productTable.inventory),
-              updatedAt: dayjs().toISOString(),
-            },
-            where: [eq(productTable.id, productId)],
-          },
-          tx
-        ),
-        this.productHandler.createProductInventoryLog(
-          userId,
+        this.productHandler.processChangeProductInventory({
           product,
-          inventory + 1,
+          inventory: { value: 1, type: "increment" },
+          userId,
           costPrice,
-          receiptImport.id,
-          tx
-        ),
+          changeType: InventoryChangeType.IMPORT,
+          referenceId: receiptImport.id,
+          tx,
+        }),
       ]);
 
       return receiptImport;
@@ -247,12 +233,10 @@ export default class ReceiptImportHandler {
     const { items, ...newReceiptData } = body;
     const { fullname } = jwtPayload;
 
-    console.log({ items, newReceiptData });
-
     const payloadUpdate = removeEmptyProps(newReceiptData);
     const dataUpdate: UpdateReceiptImport = {
       ...payloadUpdate,
-      updatedAt: dayjs().toISOString(),
+      updatedAt: getCurrentISODate(),
     };
 
     await database.transaction(async (tx) => {
@@ -542,28 +526,6 @@ export default class ReceiptImportHandler {
       receiptId,
     }));
     await this.receiptItemRepository.createReceiptItem(receiptItemsData, tx);
-  }
-
-  private async getProductByIdentity(
-    identifier: string,
-    opts: Pick<RepositoryOption, "select"> & { withSuppliers?: boolean },
-    tx?: PgTx
-  ): Promise<ProductWithSuppliers> {
-    if (opts.select && !("code" in opts.select)) {
-      opts.select = {
-        ...opts.select,
-        code: sql`'NK' || LPAD(${productTable.productCode}::text, 5, '0')`,
-      };
-    }
-
-    const { data: product, error } =
-      await this.productRepository.findProductByIdentity(identifier, opts, tx);
-
-    if (error) {
-      throw new Error(error);
-    }
-
-    return product;
   }
 
   private async getReceiptItemsByReceiptId(receiptId: string, tx?: PgTx) {

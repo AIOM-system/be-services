@@ -31,7 +31,7 @@ export const productInventoryLogTable = pgTable(DbTables.ProductInventoryLogs, {
   costPriceChange: customNumeric("cost_price_change"),
   currentCostPrice: customNumeric("current_cost_price"),
 
-  referenceId: uuid("reference_id"), // ID of related document (receipt import, return, check)
+  referenceId: uuid("reference_id"), // ID of related document (order, receipt import, return, check)
 
   userId: uuid("user_id")
     .notNull()

@@ -1,7 +1,6 @@
 import { inject, injectable } from "tsyringe";
 import { Context } from "hono";
 import { desc, eq, gte, ilike, inArray, lte, or, sql } from "drizzle-orm";
-import dayjs from "dayjs";
 import * as XLSX from "xlsx";
 
 import { SupplierRepository } from "../../../database/repositories/supplier.repository.ts";
@@ -36,10 +35,15 @@ import type {
 } from "../../../common/types/index.d.ts";
 
 import { database } from "../../../common/config/database.ts";
+import { decrement, increment } from "../../../database/custom/helpers.ts";
 import { ProductStatus } from "../enums/product.enum.ts";
+
 import { InventoryChangeType } from "../../../database/enums/inventory.enum.ts";
 import { UserActivityType } from "../../../database/enums/user-activity.enum.ts";
 import { PgTx } from "../../../database/custom/data-types.ts";
+import type { IProcessProductInventoryChange } from "../dtos/product.dto.ts";
+
+import { getCurrentISODate } from "../../../common/utils/date.ts";
 
 @injectable()
 export default class ProductHandler {
@@ -152,7 +156,7 @@ export default class ProductHandler {
     // Update product details
     const result = await database.transaction(async (tx) => {
       const dataUpdate: Partial<UpdateProduct> = {
-        updatedAt: dayjs().toISOString(),
+        updatedAt: getCurrentISODate(),
       };
 
       if (productName) dataUpdate.productName = productName;
@@ -189,6 +193,7 @@ export default class ProductHandler {
           inventory as number,
           costPrice as number,
           "",
+          InventoryChangeType.MANUAL,
           tx
         );
       }
@@ -485,156 +490,154 @@ export default class ProductHandler {
     });
   }
 
-  async parseExcelFile(file: File) {
-    const data = await file.arrayBuffer();
-    const workbook = XLSX.read(data, { type: "array" });
-    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-    return XLSX.utils.sheet_to_json(worksheet);
-  }
-
   async importProducts(ctx: Context) {
     try {
-      // const query = ctx.req.query();
       const body = await ctx.req.parseBody();
 
       if (body["file"] instanceof File) {
         const file = body["file"];
-        console.log(`Got file sized: ${file.size}`);
+        console.log(`Processing file: ${file.size} bytes`);
 
-        const result: ResponseType = await new Promise((resolve) => {
-          const reader = new FileReader();
+        // Stream processing approach
+        const buffer = await file.arrayBuffer();
+        const workbook = XLSX.read(buffer, { type: "array" });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const sheetData: any[] = XLSX.utils.sheet_to_json(sheet);
 
-          reader.onload = async (event: ProgressEvent<FileReader>) => {
-            if (!event.target) {
-              return resolve({
-                success: false,
-                message: "Event target not found",
-                statusCode: 500,
-              });
-            }
+        // Optimize batch size based on data volume
+        const batchSize = Math.min(
+          1000,
+          Math.max(
+            100,
+            Math.floor(50000 / Object.keys(sheetData[0] || {}).length)
+          )
+        );
+        console.log(
+          `Using batch size: ${batchSize}, total rows: ${sheetData.length}`
+        );
 
-            const workbook = XLSX.read(event.target.result, { type: "binary" });
-            const sheetName = workbook.SheetNames[0];
-            const sheet = workbook.Sheets[sheetName];
-            const sheetData: any[] = XLSX.utils.sheet_to_json(sheet);
-            console.log({ SHEET_DATA_LENGTH: sheetData.length });
+        console.time("import_product_timer")
+        // Pre-process all supplier data to reduce database calls
+        const allSupplierNames = new Set<string>();
+        sheetData.forEach((row) => {
+          const suppliers = row["Nhà Cung Cấp"];
+          if (suppliers) {
+            suppliers
+              .split(";")
+              .forEach((name) => allSupplierNames.add(name.trim()));
+          }
+        });
 
-            const batchSize = 500;
-            const batches: any[] = [];
+        let result: ResponseType;
 
-            for (let i = 0; i < sheetData.length; i += batchSize) {
-              batches.push(sheetData.slice(i, i + batchSize));
-            }
+        try {
+          await database.transaction(async (tx) => {
+            // Bulk create/update all suppliers at once
+            const supplierEntries = Array.from(allSupplierNames).map(
+              (name) => ({
+                code: generateSupplierCode(),
+                name,
+              })
+            );
 
-            await database.transaction(async (tx) => {
-              for (const batch of batches) {
-                const productsAsync = batch.map(async (row) => {
-                  const costPrice = row["Giá vốn"];
-                  const suppliers = row["Nhà Cung Cấp"];
-                  let productSuppliers: InsertProductSupplier[] = [];
-
-                  if (suppliers) {
-                    // Split and get unique supplier names
-                    const supplierNames = [
-                      ...new Set(
-                        suppliers.split(";").map((name) => name.trim())
-                      ),
-                    ] as string[];
-
-                    // First, collect all unique suppliers and create/update them in a single batch
-                    const uniqueSuppliers = new Map();
-                    for (const name of supplierNames) {
-                      if (!uniqueSuppliers.has(name)) {
-                        uniqueSuppliers.set(name, {
-                          code: generateSupplierCode(),
-                          name,
-                        });
-                      }
-                    }
-
-                    // Create/update all suppliers at once
-                    const { data: newSuppliers } =
-                      await this.supplierRepository.createSupplierOnConflictDoUpdate(
-                        Array.from(uniqueSuppliers.values()),
-                        tx
-                      );
-
-                    // Map supplier names to their IDs for later use
-                    const supplierNameToId = new Map(
-                      newSuppliers.map((supplier, index) => [
-                        Array.from(uniqueSuppliers.keys())[index],
-                        supplier.id,
-                      ])
-                    );
-
-                    // Now map the original supplier names to their IDs and cost prices
-                    productSuppliers = supplierNames.map((name) => ({
-                      productId: "",
-                      supplierId: supplierNameToId.get(name) as string,
-                      costPrice,
-                    }));
-                  }
-
-                  const product: Record<string, string | number> = {
-                    productName: row["Tên hàng"],
-                    costPrice,
-                    sellingPrice: row["Giá bán"],
-                    inventory: row["Tồn kho"],
-                    unit: row["ĐVT"],
-                    category: row["Nhóm hàng"],
-                    description: row["Mô tả"],
-                    note: row["Ghi chú"],
-                    imageUrls: row["Hình ảnh"]?.split(",") ?? [],
-                    warehouse: row["Vị trí"],
-                    status: ProductStatus.ACTIVE,
-                  };
-
-                  return { product, productSuppliers };
-                });
-
-                const productsAndSuppliers = await Promise.all(productsAsync);
-
-                // Insert products first
-                const createdProducts =
-                  await this.productRepository.createProductOnConflictDoNothing(
-                    productsAndSuppliers.map((item) => item.product),
-                    tx
-                  );
-
-                // Insert product-supplier relationships
-                const productSuppliersAsync = createdProducts.map(
-                  async (product, index) => {
-                    const productSuppliers =
-                      productsAndSuppliers[index].productSuppliers;
-
-                    if (productSuppliers.length) {
-                      const productSupplierValues = productSuppliers.map(
-                        (supplier) => ({
-                          ...supplier,
-                          productId: product.id,
-                        })
-                      );
-
-                      await tx
-                        .insert(productSupplierTable)
-                        .values(productSupplierValues);
-                    }
-                  }
+            // Only process suppliers if there are any
+            let supplierNameToId = new Map<string, string>();
+            if (supplierEntries.length > 0) {
+              const { data: allSuppliers } =
+                await this.supplierRepository.createSupplierOnConflictDoUpdate(
+                  supplierEntries,
+                  tx
                 );
 
-                await Promise.all(productSuppliersAsync);
-                // End of batch processing
+              // Create lookup map for all suppliers
+              supplierNameToId = new Map(
+                allSuppliers.map((supplier) => [supplier.name, supplier.id])
+              );
+            }
+
+            // Process in batches to avoid memory issues
+            for (let i = 0; i < sheetData.length; i += batchSize) {
+              const batch = sheetData.slice(i, i + batchSize);
+
+              // Prepare all products in batch
+              const productsToCreate = batch.map((row) => ({
+                productName: row["Tên hàng"],
+                costPrice: row["Giá vốn"],
+                sellingPrice: row["Giá bán"],
+                inventory: row["Tồn kho"],
+                unit: row["ĐVT"],
+                category: row["Nhóm hàng"],
+                description: row["Mô tả"],
+                note: row["Ghi chú"],
+                imageUrls: row["Hình ảnh"]?.split(",") ?? [],
+                warehouse: row["Vị trí"],
+                status: ProductStatus.ACTIVE,
+              }));
+
+              // Bulk insert products
+              const createdProducts =
+                await this.productRepository.createProductOnConflictDoNothing(
+                  productsToCreate,
+                  tx
+                );
+
+              // Prepare all product-supplier relationships
+              const allProductSuppliers: InsertProductSupplier[] = [];
+
+              createdProducts.forEach((product, idx) => {
+                const row = batch[idx];
+                const suppliers = row["Nhà Cung Cấp"];
+                const costPrice = row["Giá vốn"];
+
+                if (suppliers && product.id) {
+                  const supplierNames = [
+                    ...new Set(suppliers.split(";").map((name) => name.trim())),
+                  ];
+
+                  supplierNames.forEach((name) => {
+                    const supplierId = supplierNameToId.get(name as string);
+                    if (supplierId) {
+                      allProductSuppliers.push({
+                        productId: product.id,
+                        supplierId,
+                        costPrice,
+                      });
+                    }
+                  });
+                }
+              });
+
+              // Bulk insert product-supplier relationships if any exist
+              if (allProductSuppliers.length > 0) {
+                await tx
+                  .insert(productSupplierTable)
+                  .values(allProductSuppliers);
               }
-            });
 
-            resolve({
-              success: true,
-              statusCode: 200,
-            });
+              console.log(
+                `Processed batch ${i / batchSize + 1}/${Math.ceil(
+                  sheetData.length / batchSize
+                )}`
+              );
+            }
+          });
+
+          result = {
+            success: true,
+            statusCode: 200,
+            message: `Successfully imported ${sheetData.length} products`,
           };
+        } catch (txError) {
+          console.error("Transaction error:", txError);
+          result = {
+            success: false,
+            message: `Database error: ${(txError as Error).message}`,
+            statusCode: 500,
+          };
+        }
 
-          reader.readAsArrayBuffer(file);
-        });
+        console.timeEnd("import_product_timer");
 
         return ctx.json(result);
       } else {
@@ -645,11 +648,11 @@ export default class ProductHandler {
         });
       }
     } catch (error) {
+      console.error("Import error:", error);
       return ctx.json({
         success: false,
         message: (error as Error).message,
         statusCode: 500,
-        error,
       });
     }
   }
@@ -688,39 +691,44 @@ export default class ProductHandler {
     });
   }
 
-  async createProductInventoryLog(
-    userId: string,
-    product: ProductWithSuppliers,
-    inventory: number,
-    costPrice?: number,
-    referenceId?: string,
-    tx?: PgTx
-  ) {
-    const inventoryChange = (inventory as number) - product.inventory;
-    const costPriceChange = (costPrice as number) - product.costPrice;
+  async processChangeProductInventory({
+    product,
+    inventory,
+    userId,
+    costPrice,
+    changeType,
+    referenceId,
+    tx,
+  }: IProcessProductInventoryChange) {
+    const productId = product.id;
 
-    await this.productInventoryLogRepository.createLog(
-      {
-        productId: product.id,
-        changeType: InventoryChangeType.MANUAL,
-        previousInventory: product.inventory,
-        inventoryChange,
-        currentInventory: inventory as number,
-        previousCostPrice: product.costPrice,
-        costPriceChange,
-        currentCostPrice: costPrice as number,
-        referenceId,
+    await Promise.all([
+      this.productRepository.updateProduct(
+        {
+          set: {
+            inventory:
+              inventory.type === "increment"
+                ? increment(productTable.inventory, inventory.value)
+                : decrement(productTable.inventory, inventory.value),
+            updatedAt: getCurrentISODate(),
+          },
+          where: [eq(productTable.id, productId)],
+        },
+        tx
+      ),
+      this.createProductInventoryLog(
         userId,
-      },
-      tx
-    );
+        product,
+        inventory.value,
+        costPrice,
+        referenceId,
+        changeType,
+        tx
+      ),
+    ]);
   }
 
-  /**
-   * Private methods
-   */
-
-  private async getProductByIdentity(
+  async getProductByIdentity(
     identity: string,
     opts: Pick<RepositoryOption, "select"> & { withSuppliers?: boolean },
     tx?: PgTx
@@ -742,6 +750,10 @@ export default class ProductHandler {
     return product;
   }
 
+  /**
+   * PRIVATE METHODS
+   */
+
   private async updateProductSuppliers(
     productId: string,
     suppliers: Array<{ id: string; costPrice: number }>,
@@ -757,7 +769,6 @@ export default class ProductHandler {
         productId,
         supplierId: supplier.id,
         costPrice: supplier.costPrice,
-        createdAt: new Date().toISOString(),
       })
     );
 
@@ -794,5 +805,34 @@ export default class ProductHandler {
         tx
       );
     }
+  }
+
+  private async createProductInventoryLog(
+    userId: string,
+    product: ProductWithSuppliers,
+    inventory: number,
+    costPrice?: number,
+    referenceId?: string,
+    changeType?: InventoryChangeType,
+    tx?: PgTx
+  ) {
+    const inventoryChange = (inventory as number) - product.inventory;
+    const costPriceChange = (costPrice as number) - product.costPrice;
+
+    await this.productInventoryLogRepository.createLog(
+      {
+        productId: product.id,
+        changeType: changeType || InventoryChangeType.MANUAL,
+        previousInventory: product.inventory,
+        inventoryChange,
+        currentInventory: inventory as number,
+        previousCostPrice: product.costPrice,
+        costPriceChange: costPrice ? costPriceChange : 0,
+        currentCostPrice: costPrice ? costPrice : product.costPrice,
+        referenceId,
+        userId,
+      },
+      tx
+    );
   }
 }

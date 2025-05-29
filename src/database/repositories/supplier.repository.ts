@@ -136,7 +136,7 @@ export class SupplierRepository {
           updatedAt: sql`EXCLUDED.updated_at`,
         },
       })
-      .returning({ id: supplierTable.id });
+      .returning({ id: supplierTable.id, name: supplierTable.name });
 
     const result = await query.execute();
     return { data: result, error: null };
